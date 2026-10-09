@@ -76,7 +76,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
-      - name: Save test reports
+      - name: Save build and test reports
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
@@ -86,5 +86,7 @@ jobs:
             app/build/test-results/test/
             audio/build/reports/tests/test/
             audio/build/test-results/test/
+            build/reports/dependency-verification/
+            build/reports/problems/
           if-no-files-found: ignore
           retention-days: 14
