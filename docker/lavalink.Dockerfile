@@ -1,5 +1,7 @@
 FROM eclipse-temurin:25-jdk-noble AS build
 WORKDIR /workspace
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN bash ./gradlew :audio:shadowJar --no-daemon
 

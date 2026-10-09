@@ -15,7 +15,10 @@ distributions {
 }
 dependencies {
     implementation project(':common')
-    implementation "net.dv8tion:JDA:${jdaVersion}"
+    implementation("net.dv8tion:JDA:${jdaVersion}") {
+        // Lavalink handles audio; JDA's Opus backend brings an incompatible legacy JNA.
+        exclude group: 'club.minnced', module: 'opus-java'
+    }
     implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
     implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${jacksonVersion}"
     implementation 'org.slf4j:slf4j-api:2.0.20'

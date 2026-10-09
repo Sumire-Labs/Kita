@@ -13,7 +13,9 @@ import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 public final class PreviewRenderer {
     private PreviewRenderer() {}
     public static MessageCreateData render(Preview preview, boolean nsfwChannel) {
-        var container = Container.of(TextDisplay.of("### " + Ui.safe(preview.platform()) + " · " + Ui.safe(preview.author())));
+        var author = Ui.safe(preview.author());
+        if (author.length() > 100) author = author.substring(0, 100);
+        var container = Container.of(TextDisplay.of("### " + Ui.safe(preview.platform()) + (author.isBlank() ? "" : " · " + author)));
         boolean hidden = preview.sensitive() && !nsfwChannel;
         var text = Ui.safe(preview.text());
         if (text.length() > 2500) text = text.substring(0, 2500) + "…";

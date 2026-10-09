@@ -12,6 +12,8 @@ import com.sumirelabs.kita.music.MusicCommand;
 import com.sumirelabs.kita.music.MusicListener;
 import com.sumirelabs.kita.music.MusicService;
 import com.sumirelabs.kita.previews.FxTwitterProvider;
+import com.sumirelabs.kita.previews.InstagramProvider;
+import com.sumirelabs.kita.previews.TikTokProvider;
 import com.sumirelabs.kita.previews.PreviewListener;
 import com.sumirelabs.kita.previews.RedditProvider;
 import com.sumirelabs.kita.previews.YtDlpProvider;
@@ -45,7 +47,7 @@ public final class FeatureWiring {
         }
         var ytDlp = new YtDlpProvider(config.previews().ytDlp());
         listeners.add(new PreviewListener(settings, worker, Map.of("x", new FxTwitterProvider(), "reddit", new RedditProvider(),
-                "tiktok", ytDlp, "twitch", ytDlp, "instagram", ytDlp, "youtube", ytDlp)));
+                "tiktok", new TikTokProvider(ytDlp), "twitch", ytDlp, "instagram", new InstagramProvider(ytDlp), "youtube", ytDlp)));
         listeners.add(new FlagTranslationListener(settings,
                 new TranslationService(config.deepl().key(), config.deepl().maxCharacters()), worker, config.deepl().flagLanguages()));
         listeners.add(new TicketListener(settings, service, worker));

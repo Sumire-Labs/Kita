@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.sharding.DefaultShardManagerBuilder;
 import net.dv8tion.jda.api.sharding.ShardManager;
@@ -30,6 +29,7 @@ public final class Kita implements AutoCloseable {
     private PlayerRefresh refresh;
     private HealthServer health;
     private TicketRecovery ticketRecovery;
+    private StatusPresence presence;
 
     public static void main(String[] arguments) throws Exception {
         boolean check = arguments.length > 0 && arguments[0].equals("--check-config");
@@ -45,6 +45,7 @@ public final class Kita implements AutoCloseable {
 
     private void start(KitaConfig config) throws Exception {
         var buildVersion = version();
+        presence = new StatusPresence(buildVersion);
         var db = config.database();
         database = new Database(db.url(), db.user(), db.password());
         if (config.music().enabled()) {
@@ -56,12 +57,13 @@ public final class Kita implements AutoCloseable {
                 .enableCache(CacheFlag.VOICE_STATE)
                 .setMemberCachePolicy(MemberCachePolicy.VOICE).setEnableShutdownHook(false)
                 .setShardsTotal(config.bot().shards() == 0 ? -1 : config.bot().shards())
-                .setActivity(Activity.playing("v" + buildVersion + " • /settings • k!"));
+                .setActivity(presence.current());
         if (music != null) builder.setVoiceDispatchInterceptor(new JDAVoiceUpdateListener(music.client()));
         builder.addEventListeners(FeatureWiring.listeners(config, new JdbcSettingsRepository(database.source()),
                 new JdbcTicketRepository(database.source()), worker, music,
                 id -> shards == null ? null : shards.getGuildById(id), buildVersion));
         shards = builder.build();
+        presence.start(shards);
         ticketRecovery = new TicketRecovery(new JdbcTicketRepository(database.source()), shards::getGuildById, worker);
         if (music != null) refresh = new PlayerRefresh(music, shards::getGuildById, worker);
         health = new HealthServer(() -> shards.getShards().size() == shards.getShardsTotal()
@@ -82,6 +84,7 @@ public final class Kita implements AutoCloseable {
     @Override public void close() {
         if (!closed.compareAndSet(false, true)) return;
         if (health != null) health.close();
+        if (presence != null) presence.close();
         if (refresh != null) refresh.close();
         if (ticketRecovery != null) ticketRecovery.close();
         worker.close();

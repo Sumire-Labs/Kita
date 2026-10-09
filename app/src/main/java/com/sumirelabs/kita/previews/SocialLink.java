@@ -16,6 +16,10 @@ public record SocialLink(String platform, URI uri) {
             Map.entry("twitch.tv", "twitch"), Map.entry("clips.twitch.tv", "twitch"),
             Map.entry("instagram.com", "instagram"), Map.entry("youtube.com", "youtube"), Map.entry("youtu.be", "youtube"));
 
+    public static long urlCount(String content) {
+        return Pattern.compile("https?://[^\\s<>|`]+", Pattern.CASE_INSENSITIVE).matcher(content).results().count();
+    }
+
     public static List<SocialLink> find(String content) {
         var links = new ArrayList<SocialLink>();
         var matcher = URL.matcher(content);
