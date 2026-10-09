@@ -6,7 +6,9 @@ public record KitaConfig(Bot bot, Database database, DeepL deepl, Music music, P
     public record Bot(String token, int shards, long developmentGuildId) {}
     public record Database(String url, String user, String password) {}
     public record DeepL(String key, int maxCharacters, Map<String, String> flagLanguages) {}
-    public record Music(boolean enabled, String uri, String password, String presetsDirectory) {}
+    public record Music(boolean enabled, String uri, String password, String presetsDirectory, String defaultPreset) {
+        public Music { defaultPreset = defaultPreset == null || defaultPreset.isBlank() ? "off" : defaultPreset.strip(); }
+    }
     public record Previews(String ytDlp) {}
 
     public void validate() {

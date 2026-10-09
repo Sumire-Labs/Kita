@@ -50,7 +50,7 @@ public final class Kita implements AutoCloseable {
         database = new Database(db.url(), db.user(), db.password());
         if (config.music().enabled()) {
             music = new MusicService(Helpers.getUserIdFromToken(config.bot().token()), config.music().uri(),
-                    config.music().password(), Path.of(config.music().presetsDirectory()), worker);
+                    config.music().password(), Path.of(config.music().presetsDirectory()), worker, config.music().defaultPreset());
         }
         var builder = DefaultShardManagerBuilder.createLight(config.bot().token(), GatewayIntent.GUILD_MESSAGES,
                         GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.GUILD_VOICE_STATES)

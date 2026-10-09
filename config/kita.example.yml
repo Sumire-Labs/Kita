@@ -15,6 +15,7 @@ music:
   uri: "${LAVALINK_URI:-http://lavalink:2333}"
   password: "${LAVALINK_PASSWORD}"
   presetsDirectory: "${PRESETS_DIRECTORY:-presets}"
+  defaultPreset: "Aura_Halo_2.0.wav" # WAVの相対ファイル名。未配置なら無効、offで明示的に無効化
 previews:
   ytDlp: "${YT_DLP:-yt-dlp}"
 dataDirectory: "${DATA_DIRECTORY:-data}"

@@ -4,7 +4,6 @@ import com.sumirelabs.kita.common.PresetFiles;
 import com.sumirelabs.kita.discord.WorkExecutor;
 import dev.arbjerg.lavalink.client.LavalinkClient;
 import dev.arbjerg.lavalink.client.NodeOptions;
-import dev.arbjerg.lavalink.client.player.FilterBuilder;
 import dev.arbjerg.lavalink.client.player.LavalinkPlayer;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -16,10 +15,13 @@ public final class MusicService implements AutoCloseable {
     private static final Duration TIMEOUT = Duration.ofSeconds(20);
     private final LavalinkClient client;
     private final Map<Long, MusicSession> sessions = new ConcurrentHashMap<>();
-    private final List<PresetFiles.Preset> presets;
+    private final MusicPresets presets;
     private final MusicLoader loader;
     public MusicService(long userId, String uri, String password, Path presetDirectory, WorkExecutor worker) throws Exception {
-        presets = PresetFiles.scan(presetDirectory);
+        this(userId, uri, password, presetDirectory, worker, "off");
+    }
+    public MusicService(long userId, String uri, String password, Path presetDirectory, WorkExecutor worker, String defaultPreset) throws Exception {
+        presets = new MusicPresets(PresetFiles.scan(presetDirectory), defaultPreset);
         client = new LavalinkClient(userId);
         loader = new MusicLoader(client);
         client.addNode(new NodeOptions.Builder().setName("main").setServerUri(uri).setPassword(password).build());
@@ -27,8 +29,8 @@ public final class MusicService implements AutoCloseable {
     }
 
     public LavalinkClient client() { return client; }
-    public MusicSession session(long guildId) { return sessions.computeIfAbsent(guildId, ignored -> new MusicSession()); }
-    public List<PresetFiles.Preset> presets() { return presets; }
+    public MusicSession session(long guildId) { return sessions.computeIfAbsent(guildId, ignored -> presets.newSession()); }
+    public List<PresetFiles.Preset> presets() { return presets.entries(); }
     public LavalinkPlayer player(long guildId) {
         var link = client.getLinkIfCached(guildId);
         return link == null ? null : link.getCachedPlayer();
@@ -53,7 +55,8 @@ public final class MusicService implements AutoCloseable {
     }
 
     private void start(long guildId, dev.arbjerg.lavalink.client.player.Track track, MusicSession session) {
-        var update = client.getOrCreateLink(guildId).createOrUpdatePlayer().setVolume(session.volume).setPaused(false);
+        var update = client.getOrCreateLink(guildId).createOrUpdatePlayer().setVolume(session.volume).setPaused(false)
+                .setFilters(MusicPresets.filters(session.preset));
         var previousId = session.playbackId;
         var previousError = session.playbackError;
         var playbackId = java.util.UUID.randomUUID().toString();
@@ -107,10 +110,10 @@ public final class MusicService implements AutoCloseable {
     }
 
     public void preset(long guildId, String id) {
-        if (!id.equals("off") && presets.stream().noneMatch(p -> p.id().equals(id))) throw new IllegalArgumentException("不明なプリセットです。");
+        if (!presets.valid(id)) throw new IllegalArgumentException("不明なプリセットです。");
         var session = session(guildId);
         synchronized (session) {
-            var filters = new FilterBuilder().setPluginFilter("kitaHrir", Map.of("preset", id)).build();
+            var filters = MusicPresets.filters(id);
             client.getOrCreateLink(guildId).createOrUpdatePlayer().setFilters(filters).block(TIMEOUT);
             session.preset = id;
         }
