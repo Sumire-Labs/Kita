@@ -15,15 +15,21 @@ final class LogSharePolicy {
                 .collect(Collectors.toUnmodifiableSet());
     }
     static boolean automatic(GuildSettings settings, long channelId, long parentId) {
-        var channels = ids(settings, "logshare.channels");
         return settings.enabled("logshare.enabled") && settings.enabled("logshare.auto")
-                && (channels.contains(String.valueOf(channelId)) || channels.contains(String.valueOf(parentId)));
+                && !excluded(settings, channelId, parentId);
+    }
+    static boolean excluded(GuildSettings settings, long channelId, long parentId) {
+        var channels = ids(settings, "logshare.excludedChannels");
+        return channels.contains(String.valueOf(channelId)) || channels.contains(String.valueOf(parentId));
     }
     static boolean allowed(long actor, long author, boolean manager, Set<String> roles, GuildSettings settings) {
         return actor == author || manager || roles.stream().anyMatch(ids(settings, "logshare.roles")::contains);
     }
     static void require(GuildSettings settings, Message message, Member member, boolean automatic) {
         if (!settings.enabled("logshare.enabled")) throw new IllegalArgumentException("LogShareは無効です。/settings から有効にしてください。");
+        long parent = message.getChannel() instanceof net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel thread
+                ? thread.getParentChannel().getIdLong() : 0;
+        if (excluded(settings, message.getChannelIdLong(), parent)) throw new IllegalArgumentException("このチャンネルではLogShareは利用できません。");
         if (message.getAuthor().isBot() || message.isWebhookMessage()) throw new IllegalArgumentException("BotやWebhookの投稿は共有できません。");
         if (member == null || !member.hasPermission(message.getGuildChannel(), Permission.VIEW_CHANNEL, Permission.MESSAGE_HISTORY)) {
             throw new IllegalArgumentException("元のメッセージを閲覧する権限が必要です。");

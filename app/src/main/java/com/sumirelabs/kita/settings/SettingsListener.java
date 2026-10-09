@@ -57,7 +57,11 @@ public final class SettingsListener extends ListenerAdapter {
     @Override public void onEntitySelectInteraction(EntitySelectInteractionEvent event) {
         if (!authorized(event)) return;
         String action = event.getComponentId().split(":", 3)[2];
-        if (java.util.Set.of("logshare.channels", "logshare.roles").contains(action)) {
+        if (action.equals("logshare.channels")) {
+            event.reply(Ui.text("Settings", "チャンネル設定は除外方式へ変更されました。/settings を開き直してください。"))
+                    .setEphemeral(true).queue(); return;
+        }
+        if (java.util.Set.of("logshare.excludedChannels", "logshare.roles").contains(action)) {
             update(event, "logshare", Map.of(action, event.getValues().stream().map(value -> value.getId())
                     .collect(java.util.stream.Collectors.joining(","))));
             return;

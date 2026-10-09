@@ -19,7 +19,15 @@ class MclogsGatewayTest {
         final AtomicReference<String> content = new AtomicReference<>();
         boolean filtersFail;
         int filterLines = 100;
+        boolean missingLog;
         Api() throws Exception {
+            server.createContext("/1/log/", exchange -> {
+                assertTrue(exchange.getRequestURI().getQuery().contains("raw"));
+                String json = missingLog ? "{\"success\":false,\"error\":\"Log not found\"}"
+                        : new ObjectMapper().writeValueAsString(java.util.Map.of("id", "abc123", "content", java.util.Map.of("raw", "日本語のログ\n[hidden]")));
+                byte[] body = json.getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(missingLog ? 404 : 200, body.length); exchange.getResponseBody().write(body); exchange.close();
+            });
             server.createContext("/1/limits", exchange -> {
                 byte[] body = "{\"storageTime\":7776000,\"maxLength\":10485760,\"maxLines\":25000}".getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, body.length); exchange.getResponseBody().write(body); exchange.close();
@@ -67,6 +75,14 @@ class MclogsGatewayTest {
             api.filtersFail = true;
             var error = assertThrows(Exception.class, () -> api.gateway().upload("line\n".repeat(15_000)));
             assertTrue(LogShareMessages.error(error).contains("上限")); assertEquals(0, api.uploads.get());
+        }
+    }
+    @Test void downloadsStoredContentAsUtf8AndDoesNotDownloadApiErrorsAsLogs() throws Exception {
+        try (var api = new Api()) {
+            assertArrayEquals("日本語のログ\n[hidden]".getBytes(StandardCharsets.UTF_8), api.gateway().download("abc123"));
+            api.missingLog = true;
+            assertThrows(Exception.class, () -> api.gateway().download("missing"));
+            assertThrows(IllegalArgumentException.class, () -> api.gateway().download("../invalid"));
         }
     }
 }

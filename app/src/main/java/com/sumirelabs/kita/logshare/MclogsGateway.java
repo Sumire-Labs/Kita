@@ -10,6 +10,16 @@ final class MclogsGateway {
     private final MclogsClient client;
     MclogsGateway(String version) { this(new MclogsClient("Kita", version)); }
     MclogsGateway(MclogsClient client) { this.client = client; }
+    byte[] download(String id) throws Exception {
+        if (!id.matches("[A-Za-z0-9]{1,32}")) throw new IllegalArgumentException("ログIDが不正です。");
+        var response = client.getLog(id, gs.mclo.api.data.LogField.RAW).get(20, TimeUnit.SECONDS);
+        if (response.getContent() == null || response.getContent().getRaw() == null) {
+            throw new IllegalArgumentException("ログの内容が見つかりません。保存期限が切れている可能性があります。");
+        }
+        String content = response.getContent().getRaw();
+        LogContent.validate(content, LogContent.MAX_BYTES, LogContent.MAX_LINES);
+        return content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
     String upload(String content) throws Exception {
         var limits = client.getLimits().get(20, TimeUnit.SECONDS);
         LogContent.validate(content, limits.getMaxLength(), limits.getMaxLines());

@@ -5,6 +5,7 @@ import com.sumirelabs.kita.discord.WorkExecutor;
 import com.sumirelabs.kita.settings.SettingsRepository;
 import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -15,9 +16,12 @@ public final class LogShareListener extends ListenerAdapter {
     private final WorkExecutor worker;
     private final SettingsRepository settings;
     private final LogShareService service;
+    private final LogShareDownloads downloads;
     public LogShareListener(SettingsRepository settings, LogShareRepository repository, WorkExecutor worker, String version) {
         this.settings = settings; this.worker = worker; service = new LogShareService(settings, repository, version);
+        downloads = new LogShareDownloads(settings, worker, version);
     }
+    @Override public void onButtonInteraction(ButtonInteractionEvent event) { downloads.handle(event); }
     @Override public void onMessageReceived(MessageReceivedEvent event) {
         if (!event.isFromGuild() || event.getAuthor().isBot() || event.isWebhookMessage()
                 || event.getMessage().getAttachments().stream().noneMatch(a -> LogDetector.supported(a.getFileName()))) return;
