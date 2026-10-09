@@ -19,10 +19,11 @@ public final class PlayerPanel {
             long position = player == null ? 0 : player.getPosition();
             long length = track == null ? 0 : track.getInfo().getLength();
             int filled = length <= 0 ? 0 : Math.clamp(position * 20 / length, 0, 20);
-            var status = track == null ? "待機中" : shortTitle(track.getInfo().getTitle());
+            var status = track == null ? "待機中" : MusicTrackDisplay.title(track.getInfo().getTitle(), track.getInfo().getUri());
             if (!session.playbackError.isEmpty()) status = "⚠ 再生に失敗しました\n" + status;
             String queue = session.queue.upcoming().stream().limit(5)
-                    .map(t -> "• " + shortTitle(t.getInfo().getTitle())).collect(java.util.stream.Collectors.joining("\n"));
+                    .map(t -> "• " + MusicTrackDisplay.queueTitle(t.getInfo().getTitle(), t.getInfo().getUri()))
+                    .collect(java.util.stream.Collectors.joining("\n"));
             var volume = StringSelectMenu.create("music:volume").setPlaceholder("音量");
             for (int level = 0; level <= 100; level += 5) volume.addOption(level + "%", String.valueOf(level));
             volume.setDefaultValues(String.valueOf(session.volume));
@@ -34,8 +35,9 @@ public final class PlayerPanel {
             if (session.preset.equals("off") || music.presets().stream().skip(start).limit(24).anyMatch(p -> p.id().equals(session.preset))) {
                 preset.setDefaultValues(session.preset);
             }
-            return Ui.message(List.of(Container.of(TextDisplay.of("## Kita Player\n**" + status + "**\n"
-                            + "▰".repeat(filled) + "▱".repeat(20 - filled) + "\n" + time(position) + " / " + time(length)
+            return Ui.message(List.of(Container.of(MusicTrackDisplay.heading("## Kita Player\n**" + status + "**",
+                            track == null ? null : MusicTrackDisplay.artwork(track.getInfo())),
+                    TextDisplay.of("▰".repeat(filled) + "▱".repeat(20 - filled) + "\n" + time(position) + " / " + time(length)
                             + " · 音量 " + session.volume + "% · Loop " + session.queue.loop() + "\n"
                             + PresetSelector.details(music.presets(), session.preset) + "\n"
                             + (session.playbackError.isEmpty() ? "" : session.playbackError + "\n")
@@ -52,5 +54,4 @@ public final class PlayerPanel {
     }
 
     public static String time(long millis) { return "%d:%02d".formatted(millis / 60_000, millis / 1000 % 60); }
-    private static String shortTitle(String text) { return Ui.safe(text.substring(0, Math.min(200, text.length()))); }
 }

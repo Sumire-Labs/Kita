@@ -52,7 +52,7 @@ public final class MusicService implements AutoCloseable {
             } catch (RuntimeException error) { session.queue.restore(snapshot); throw error; }
         }
         var first = tracks.getFirst().getInfo();
-        return new QueueAddition(tracks.size(), first.getTitle(), first.getUri());
+        return new QueueAddition(tracks.size(), first.getTitle(), first.getUri(), MusicTrackDisplay.artwork(first));
     }
 
     private void start(long guildId, dev.arbjerg.lavalink.client.player.Track track, MusicSession session) {
