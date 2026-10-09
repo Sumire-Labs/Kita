@@ -6,7 +6,7 @@ COPY . .
 RUN bash ./gradlew :app:installDist --no-daemon
 
 FROM eclipse-temurin:25-jre-noble
-RUN apt-get update && apt-get install -y --no-install-recommends curl python3 python3-venv ffmpeg \
+RUN apt-get update && apt-get install -y --no-install-recommends curl python3 python3-venv ffmpeg fontconfig fonts-noto-color-emoji libegl1 libgl1 \
     && python3 -m venv /opt/yt-dlp \
     && /opt/yt-dlp/bin/pip install --no-cache-dir yt-dlp==2026.8.19 \
     && rm -rf /var/lib/apt/lists/* \

@@ -50,7 +50,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6.4.0
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg fontconfig fonts-noto-color-emoji libegl1 libgl1
       - name: Test and package
         run: bash ./gradlew clean releaseBundle --no-daemon --console=plain
         env:
@@ -58,6 +58,7 @@ jobs:
           KITA_TEST_DB_USER: kita_test
           KITA_TEST_DB_PASSWORD: integration-only
           KITA_TEST_FFMPEG: "true"
+          JAVA_TOOL_OPTIONS: --enable-native-access=ALL-UNNAMED
       - name: Read build metadata
         id: metadata
         shell: bash

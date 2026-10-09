@@ -32,6 +32,9 @@ dependencies {
     implementation 'dev.arbjerg:lavalink-client:3.4.0'
     implementation 'org.jsoup:jsoup:1.23.2'
     implementation 'gs.mclo:api:6.2.1'
+    implementation 'io.github.humbleui:skija-shared:0.143.17'
+    runtimeOnly 'io.github.humbleui:skija-windows-x64:0.143.17'
+    runtimeOnly 'io.github.humbleui:skija-linux-x64:0.143.17'
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.20'
 }
 tokenEnvoy {

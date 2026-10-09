@@ -8,6 +8,9 @@ import com.sumirelabs.kita.storage.Database;
 import com.sumirelabs.kita.storage.JdbcSettingsRepository;
 import com.sumirelabs.kita.storage.JdbcTicketRepository;
 import com.sumirelabs.kita.storage.JdbcLogShareRepository;
+import com.sumirelabs.kita.storage.JdbcLevelsRepository;
+import com.sumirelabs.kita.levels.LevelsService;
+import com.sumirelabs.kita.levels.VoiceXpListener;
 import com.sumirelabs.kita.tickets.TicketRecovery;
 import dev.arbjerg.lavalink.libraries.jda.JDAVoiceUpdateListener;
 import dev.arbjerg.lavalink.client.Helpers;
@@ -33,6 +36,8 @@ public final class Kita implements AutoCloseable {
     private HealthServer health;
     private TicketRecovery ticketRecovery;
     private StatusPresence presence;
+    private VoiceXpListener voiceXp;
+    private LevelsService levels;
 
     public static void main(String[] arguments) throws Exception {
         boolean check = arguments.length > 0 && arguments[0].equals("--check-config");
@@ -51,6 +56,9 @@ public final class Kita implements AutoCloseable {
         presence = new StatusPresence(buildVersion);
         var db = config.database();
         database = new Database(db.url(), db.user(), db.password());
+        var settings = new JdbcSettingsRepository(database.source());
+        levels = new LevelsService(settings, new JdbcLevelsRepository(database.source()), worker);
+        voiceXp = new VoiceXpListener(levels, () -> shards == null ? java.util.List.of() : shards.getGuilds(), worker);
         if (config.music().enabled()) {
             music = new MusicService(Helpers.getUserIdFromToken(config.bot().token()), config.music().uri(),
                     config.music().password(), Path.of(config.music().presetsDirectory()), worker, config.music().defaultPreset());
@@ -63,9 +71,9 @@ public final class Kita implements AutoCloseable {
                 .setActivity(presence.current());
         if (music != null) builder.setVoiceDispatchInterceptor(new JDAVoiceUpdateListener(music.client()));
         stay = new StayService(id -> shards == null ? null : shards.getGuildById(id), music, worker);
-        builder.addEventListeners(FeatureWiring.listeners(config, new JdbcSettingsRepository(database.source()),
+        builder.addEventListeners(FeatureWiring.listeners(config, settings,
                 new JdbcTicketRepository(database.source()), worker, music, stay,
-                id -> shards == null ? null : shards.getGuildById(id), buildVersion, new JdbcLogShareRepository(database.source())));
+                id -> shards == null ? null : shards.getGuildById(id), buildVersion, new JdbcLogShareRepository(database.source()), levels, voiceXp));
         shards = builder.build();
         presence.start(shards);
         ticketRecovery = new TicketRecovery(new JdbcTicketRepository(database.source()), shards::getGuildById, worker);
@@ -91,6 +99,8 @@ public final class Kita implements AutoCloseable {
         if (presence != null) presence.close();
         if (refresh != null) refresh.close();
         if (stay != null) stay.close();
+        if (voiceXp != null) voiceXp.close();
+        if (levels != null) levels.close();
         if (ticketRecovery != null) ticketRecovery.close();
         worker.close();
         if (music != null) music.close();

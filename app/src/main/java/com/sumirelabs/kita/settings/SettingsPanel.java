@@ -17,14 +17,10 @@ public final class SettingsPanel {
     public static final List<String> PLATFORMS = List.of("x", "reddit", "tiktok", "twitch", "instagram", "youtube");
 
     public static MessageCreateData render(GuildSettings settings, long userId, String page) {
+        var container = base(userId, page);
         var prefix = "settings:" + userId + ":";
-        var navigation = StringSelectMenu.create(prefix + "page");
-        navigation.addOption("概要", "home").addOption("EmbedPlacer", "previews")
-                .addOption("FlagTL", "translation").addOption("Ticket", "ticket").addOption("LogShare", "logshare");
-        navigation.setDefaultValues(page);
-        var container = Container.of(TextDisplay.of("## Kita Settings\n設定はこのサーバーにだけ適用されます。"),
-                ActionRow.of(navigation.build()));
         switch (page) {
+            case "levels" -> container = com.sumirelabs.kita.levels.LevelsSettings.append(container, settings, userId, "chat");
             case "logshare" -> container = com.sumirelabs.kita.logshare.LogShareSettings.append(container, prefix, settings);
             case "previews" -> {
                 var platforms = StringSelectMenu.create(prefix + "platforms").setPlaceholder("有効にするSNS")
@@ -56,9 +52,17 @@ public final class SettingsPanel {
                     + state(settings.enabled("previews.enabled")) + "\nFlagTL: "
                     + state(settings.enabled("translation.enabled")) + "\nTicket: "
                     + state(settings.enabled("ticket.enabled")) + "\nLogShare: "
-                    + state(settings.enabled("logshare.enabled")) + "\nカテゴリから設定を選択してください。"));
+                    + state(settings.enabled("logshare.enabled")) + "\nLevels: "
+                    + state(settings.enabled("levels.enabled")) + "\nカテゴリから設定を選択してください。"));
         }
         return Ui.message(List.of(container));
+    }
+
+    public static Container base(long userId, String page) {
+        var navigation = StringSelectMenu.create("settings:" + userId + ":page");
+        navigation.addOption("概要", "home").addOption("EmbedPlacer", "previews").addOption("FlagTL", "translation")
+                .addOption("Ticket", "ticket").addOption("LogShare", "logshare").addOption("Levels", "levels").setDefaultValues(page);
+        return Container.of(TextDisplay.of("## Kita Settings\n設定はこのサーバーにだけ適用されます。"), ActionRow.of(navigation.build()));
     }
 
     private static ActionRow toggle(String prefix, String key, GuildSettings settings) {

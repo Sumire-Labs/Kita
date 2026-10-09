@@ -16,6 +16,7 @@ import com.sumirelabs.kita.stay.StayListener;
 import com.sumirelabs.kita.stay.StayService;
 import com.sumirelabs.kita.logshare.LogShareRepository;
 import com.sumirelabs.kita.logshare.LogShareListener;
+import com.sumirelabs.kita.levels.*;
 import com.sumirelabs.kita.previews.FxTwitterProvider;
 import com.sumirelabs.kita.previews.InstagramProvider;
 import com.sumirelabs.kita.previews.TikTokProvider;
@@ -40,13 +41,19 @@ public final class FeatureWiring {
     private FeatureWiring() {}
     public static Object[] listeners(KitaConfig config, SettingsRepository settings, TicketRepository tickets,
                                      WorkExecutor worker, MusicService music, StayService stay,
-                                     LongFunction<Guild> guilds, String version, LogShareRepository logs) {
+                                     LongFunction<Guild> guilds, String version, LogShareRepository logs, LevelsService levels, VoiceXpListener voiceXp) {
         var service = new TicketService(settings, tickets,
                 new TicketTranscript(Path.of(config.dataDirectory()).resolve("transcripts")), guilds);
         var commands = new ArrayList<Command>();
         commands.add(new PingCommand()); commands.add(new AvatarCommand()); commands.add(new FastFetchCommand(version));
         commands.add(new SettingsCommand(settings)); commands.add(new TicketCommand(settings));
         var listeners = new ArrayList<Object>();
+        var images = new ProfileImages();
+        commands.add(new LevelsCommand(levels, images, "profile")); commands.add(new LevelsCommand(levels, images, "leaderboard"));
+        listeners.add(new ChatXpListener(levels, worker)); listeners.add(voiceXp);
+        listeners.add(new LeaderboardListener(levels, worker));
+        var levelSettings = new LevelsSettingsListener(settings, levels, worker);
+        listeners.add(levelSettings); listeners.add(levelSettings.modals());
         commands.add(new StayCommand(stay));
         listeners.add(new StayListener(stay, worker));
         listeners.add(new LogShareListener(settings, logs, worker, version));

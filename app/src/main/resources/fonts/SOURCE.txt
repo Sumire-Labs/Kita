@@ -1,0 +1,6 @@
+Noto Sans JP variable font
+Source: https://github.com/google/fonts/tree/66a36c8c94b1a5d992ee4e7f392fccfe4945767c/ofl/notosansjp
+Upstream file: NotoSansJP[wght].ttf
+Bundled file: NotoSansJP.ttf (unchanged)
+SHA-256: c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f
+License: SIL Open Font License 1.1; see OFL.txt in this directory.
