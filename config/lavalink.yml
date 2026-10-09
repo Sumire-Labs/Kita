@@ -23,7 +23,8 @@ lavalink:
     frameBufferDurationMs: 1000
     opusEncodingQuality: 10
     resamplingQuality: HIGH
-    trackStuckThresholdMs: 10000
+    # yt-dlp may validate several candidates before the first audio frame arrives.
+    trackStuckThresholdMs: 60000
 plugins:
   youtube:
     enabled: false # YouTubeの音声取得はLavaSrcのyt-dlpを使用
@@ -47,7 +48,22 @@ plugins:
       searchLimit: 1
       playlistLoadLimit: 1000
       customLoadArgs: [-q, --no-warnings, --ignore-config, --flat-playlist, --skip-download, -J]
-      customPlaybackArgs: [-q, --no-warnings, --ignore-config, --no-playlist, -f, bestaudio, -J]
+      # Verify signed audio URLs before handing them to Lavaplayer; some candidates return 403.
+      customPlaybackArgs:
+        - -q
+        - --no-warnings
+        - --ignore-config
+        - --no-playlist
+        - --socket-timeout
+        - "10"
+        - --js-runtimes
+        - deno
+        - --check-formats
+        - --extractor-args
+        - youtube:player_client=web_embedded,default
+        - -f
+        - bestaudio
+        - -J
     spotify:
       countryCode: JP
       playlistLoadLimit: 10

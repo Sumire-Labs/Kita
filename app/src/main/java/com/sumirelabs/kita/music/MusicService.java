@@ -17,6 +17,7 @@ public final class MusicService implements AutoCloseable {
     private final Map<Long, MusicSession> sessions = new ConcurrentHashMap<>();
     private final MusicPresets presets;
     private final MusicLoader loader;
+    private final MusicPlaybackEvents playbackEvents;
     public MusicService(long userId, String uri, String password, Path presetDirectory, WorkExecutor worker) throws Exception {
         this(userId, uri, password, presetDirectory, worker, "off");
     }
@@ -25,7 +26,7 @@ public final class MusicService implements AutoCloseable {
         client = new LavalinkClient(userId);
         loader = new MusicLoader(client);
         client.addNode(new NodeOptions.Builder().setName("main").setServerUri(uri).setPassword(password).build());
-        new MusicPlaybackEvents(client, sessions, worker, this::start);
+        playbackEvents = new MusicPlaybackEvents(client, sessions, this::start);
     }
 
     public LavalinkClient client() { return client; }
@@ -125,5 +126,5 @@ public final class MusicService implements AutoCloseable {
         if (link != null) link.destroy().subscribe();
     }
     public Map<Long, MusicSession> sessions() { return Map.copyOf(sessions); }
-    @Override public void close() { client.close(); }
+    @Override public void close() { playbackEvents.close(); client.close(); }
 }
