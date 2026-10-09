@@ -21,14 +21,16 @@ public final class MusicLoader {
                     .flatMapSequential(name -> link.loadItem("ytsearch:" + name).map(result -> switch (result) {
                         case SearchResult search -> search.getTracks().stream().limit(1).toList();
                         case TrackLoaded loaded -> List.of(loaded.getTrack());
+                        case PlaylistLoaded loaded -> loaded.getTracks().stream().limit(1).toList();
                         default -> List.<Track>of();
                     }), 4).flatMapIterable(tracks -> tracks).collectList().block(Duration.ofMinutes(3));
             return resolved == null ? List.of() : resolved;
         }
         if (!query.startsWith("https://") && !query.matches("^(ytsearch|scsearch):.+")) query = "ytsearch:" + query;
+        boolean searchQuery = query.startsWith("ytsearch:") || query.startsWith("scsearch:");
         return switch (link.loadItem(query).block(Duration.ofSeconds(20))) {
             case TrackLoaded loaded -> List.of(loaded.getTrack());
-            case PlaylistLoaded loaded -> loaded.getTracks();
+            case PlaylistLoaded loaded -> searchQuery ? loaded.getTracks().stream().limit(1).toList() : loaded.getTracks();
             case SearchResult search -> search.getTracks().stream().limit(1).toList();
             case null, default -> List.of();
         };

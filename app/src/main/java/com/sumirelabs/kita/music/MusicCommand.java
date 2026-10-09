@@ -43,9 +43,8 @@ public final class MusicCommand implements Command {
                 session.voiceChannel = voice.getIdLong();
                 context.jda().getDirectAudioController().connect(voice);
             }
-            int added = music.enqueue(guildId, query);
-            context.reply("Music", added + " 曲をキューに追加しました。 /player で操作できます。\n"
-                    + "Spotify / Apple Musicの公開リストは先頭250曲まで取得し、別音源を検索します。");
+            var added = music.enqueue(guildId, query);
+            context.reply(MusicMessages.added(added));
         } else {
             music.action(guildId, name, 0);
             if (name.equals("stop")) context.jda().getDirectAudioController().disconnect(context.guild());

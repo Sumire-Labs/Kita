@@ -26,7 +26,7 @@ lavalink:
     trackStuckThresholdMs: 10000
 plugins:
   youtube:
-    enabled: true
+    enabled: false # YouTubeの音声取得はLavaSrcのyt-dlpを使用
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
@@ -41,6 +41,13 @@ plugins:
       deezer: false
       yandexmusic: false
       youtube: false
+      ytdlp: true
+    ytdlp:
+      path: /opt/yt-dlp/bin/yt-dlp
+      searchLimit: 1
+      playlistLoadLimit: 1000
+      customLoadArgs: [-q, --no-warnings, --ignore-config, --flat-playlist, --skip-download, -J]
+      customPlaybackArgs: [-q, --no-warnings, --ignore-config, --no-playlist, -f, bestaudio, -J]
     spotify:
       countryCode: JP
       playlistLoadLimit: 10

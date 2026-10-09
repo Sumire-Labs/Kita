@@ -11,4 +11,5 @@ public final class MusicSession {
     long panelMessage;
     long voiceChannel;
     String playbackId = "";
+    String playbackError = "";
 }

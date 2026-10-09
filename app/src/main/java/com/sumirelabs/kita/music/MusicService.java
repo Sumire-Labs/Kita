@@ -4,7 +4,6 @@ import com.sumirelabs.kita.common.PresetFiles;
 import com.sumirelabs.kita.discord.WorkExecutor;
 import dev.arbjerg.lavalink.client.LavalinkClient;
 import dev.arbjerg.lavalink.client.NodeOptions;
-import dev.arbjerg.lavalink.client.event.TrackEndEvent;
 import dev.arbjerg.lavalink.client.player.FilterBuilder;
 import dev.arbjerg.lavalink.client.player.LavalinkPlayer;
 import java.nio.file.Path;
@@ -24,18 +23,7 @@ public final class MusicService implements AutoCloseable {
         client = new LavalinkClient(userId);
         loader = new MusicLoader(client);
         client.addNode(new NodeOptions.Builder().setName("main").setServerUri(uri).setPassword(password).build());
-        client.on(TrackEndEvent.class).subscribe(event -> worker.submit(() -> {
-            var session = sessions.get(event.getGuildId());
-            if (session == null || !event.getEndReason().getMayStartNext()) return;
-            synchronized (session) {
-                var current = session.queue.current();
-                if (current == null || !session.playbackId.equals(event.getTrack().getUserData().path("kitaPlaybackId").asText())) return;
-                boolean natural = event.getEndReason().name().equals("FINISHED");
-                var snapshot = session.queue.snapshot();
-                try { start(event.getGuildId(), session.queue.next(natural), session); }
-                catch (RuntimeException error) { session.queue.restore(snapshot); throw error; }
-            }
-        }));
+        new MusicPlaybackEvents(client, sessions, worker, this::start);
     }
 
     public LavalinkClient client() { return client; }
@@ -46,26 +34,28 @@ public final class MusicService implements AutoCloseable {
         return link == null ? null : link.getCachedPlayer();
     }
 
-    public int enqueue(long guildId, String query) throws Exception {
+    public QueueAddition enqueue(long guildId, String query) throws Exception {
         return add(guildId, loader.load(guildId, query));
     }
 
-    private int add(long guildId, List<dev.arbjerg.lavalink.client.player.Track> tracks) {
+    private QueueAddition add(long guildId, List<dev.arbjerg.lavalink.client.player.Track> tracks) {
         if (tracks.isEmpty()) throw new IllegalArgumentException("再生可能な音源が見つかりませんでした。");
         var session = session(guildId);
         synchronized (session) {
             var snapshot = session.queue.snapshot();
             try {
                 session.queue.add(tracks);
-                if (session.queue.current() == null) start(guildId, session.queue.next(false), session);
+                if (session.queue.current() == null || !session.playbackError.isEmpty()) start(guildId, session.queue.next(false), session);
             } catch (RuntimeException error) { session.queue.restore(snapshot); throw error; }
         }
-        return tracks.size();
+        var first = tracks.getFirst().getInfo();
+        return new QueueAddition(tracks.size(), first.getTitle(), first.getUri());
     }
 
     private void start(long guildId, dev.arbjerg.lavalink.client.player.Track track, MusicSession session) {
         var update = client.getOrCreateLink(guildId).createOrUpdatePlayer().setVolume(session.volume).setPaused(false);
         var previousId = session.playbackId;
+        var previousError = session.playbackError;
         var playbackId = java.util.UUID.randomUUID().toString();
         if (track == null) update.stopTrack();
         else {
@@ -74,8 +64,9 @@ public final class MusicService implements AutoCloseable {
             update.setTrack(playing);
         }
         session.playbackId = playbackId;
+        session.playbackError = "";
         try { update.block(TIMEOUT); }
-        catch (RuntimeException error) { session.playbackId = previousId; throw error; }
+        catch (RuntimeException error) { session.playbackId = previousId; session.playbackError = previousError; throw error; }
     }
 
     public void action(long guildId, String action, long value) {
@@ -89,6 +80,10 @@ public final class MusicService implements AutoCloseable {
                 case "stop" -> { start(guildId, null, session); session.queue.clear(); session.voiceChannel = 0; }
                 case "loop" -> session.queue.cycleLoop();
                 case "pause" -> {
+                    if (!session.playbackError.isEmpty() && session.queue.current() != null) {
+                        start(guildId, session.queue.current(), session);
+                        break;
+                    }
                     var player = player(guildId);
                     if (player == null || player.getTrack() == null) throw new IllegalArgumentException("再生中の曲はありません。");
                     player.setPaused(!player.getPaused()).block(TIMEOUT);
