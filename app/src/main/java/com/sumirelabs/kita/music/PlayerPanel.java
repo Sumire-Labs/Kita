@@ -29,7 +29,7 @@ public final class PlayerPanel {
             var preset = StringSelectMenu.create("music:preset").setPlaceholder("HRIRプリセット").addOption("無効", "off");
             int start = session.presetPage * 24;
             for (var entry : music.presets().stream().skip(start).limit(24).toList()) {
-                preset.addOption(entry.name().substring(0, Math.min(100, entry.name().length())), entry.id());
+                preset.addOptions(PresetSelector.option(entry));
             }
             if (session.preset.equals("off") || music.presets().stream().skip(start).limit(24).anyMatch(p -> p.id().equals(session.preset))) {
                 preset.setDefaultValues(session.preset);
@@ -37,6 +37,7 @@ public final class PlayerPanel {
             return Ui.message(List.of(Container.of(TextDisplay.of("## Kita Player\n**" + status + "**\n"
                             + "▰".repeat(filled) + "▱".repeat(20 - filled) + "\n" + time(position) + " / " + time(length)
                             + " · 音量 " + session.volume + "% · Loop " + session.queue.loop() + "\n"
+                            + PresetSelector.details(music.presets(), session.preset) + "\n"
                             + (session.playbackError.isEmpty() ? "" : session.playbackError + "\n")
                             + "### キュー（" + session.queue.upcoming().size() + "曲）\n" + (queue.isBlank() ? "空です" : queue)),
                     ActionRow.of(Button.secondary("music:back", "戻る"), Button.primary("music:pause", "再生 / 一時停止"),

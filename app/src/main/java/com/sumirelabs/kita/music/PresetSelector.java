@@ -1,0 +1,31 @@
+package com.sumirelabs.kita.music;
+
+import com.sumirelabs.kita.common.PresetFiles.Preset;
+import com.sumirelabs.kita.discord.Ui;
+import java.util.List;
+import net.dv8tion.jda.api.components.selections.SelectOption;
+
+public final class PresetSelector {
+    private PresetSelector() {}
+    public static SelectOption option(Preset preset) {
+        var option = SelectOption.of(shorten(oneLine(preset.name()), 100), preset.id());
+        String description = oneLine(preset.description());
+        return description.isBlank() ? option : option.withDescription(shorten(description, 100));
+    }
+
+    public static String details(List<Preset> presets, String id) {
+        if (id.equals("off")) return "HRIR: 無効";
+        return presets.stream().filter(p -> p.id().equals(id)).findFirst().map(p ->
+                "HRIR: **" + Ui.safe(shorten(oneLine(p.name()), 100)) + "**"
+                        + (p.description().isBlank() ? "" : "\n" + Ui.safe(shorten(p.description(), 1000))))
+                .orElse("HRIR: プリセットが見つかりません");
+    }
+
+    private static String oneLine(String value) { return value.replaceAll("\\s+", " ").strip(); }
+    private static String shorten(String value, int limit) {
+        if (value.length() <= limit) return value;
+        int end = limit - 1;
+        if (Character.isHighSurrogate(value.charAt(end - 1))) end--;
+        return value.substring(0, end) + "…";
+    }
+}

@@ -20,9 +20,11 @@ public final class HrirDecoder {
             int channels = Integer.parseInt(fields[1]);
             var mapping = switch (channels) {
                 case 14 -> "pan=4c|c0=c0|c1=c1|c2=c8|c3=c7";
+                // HeSuVi's seven-channel IR stores one side; mirror its front-ear pair.
+                case 7 -> "pan=4c|c0=c0|c1=c1|c2=c1|c3=c0";
                 case 4 -> "pan=4c|c0=c0|c1=c1|c2=c2|c3=c3";
                 case 2 -> "pan=4c|c0=c0|c1=c1|c2=c1|c3=c0";
-                default -> throw new IllegalArgumentException("Expected a 2, 4 or 14 channel HRIR");
+                default -> throw new IllegalArgumentException("Expected a 2, 4, 7 or 14 channel HRIR");
             };
             run(new ProcessBuilder("ffmpeg", "-v", "error", "-nostdin", "-y", "-i", wav.toString(),
                     "-af", mapping + ",aresample=" + sampleRate, "-f", "f32le", "-acodec", "pcm_f32le", output.toString()));

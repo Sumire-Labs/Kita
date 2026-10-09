@@ -11,6 +11,7 @@ public final class HrirController {
     public HrirController(HrirCatalog catalog) { this.catalog = catalog; }
     @GetMapping("/v4/kita/presets")
     public List<Map<String, String>> presets() {
-        return catalog.presets().stream().map(p -> Map.of("id", p.id(), "name", p.name())).toList();
+        return catalog.presets().stream().map(p -> Map.of("id", p.id(), "name", p.name(),
+                "description", p.description(), "file", p.fileName())).toList();
     }
 }

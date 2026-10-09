@@ -34,6 +34,13 @@ class HrirDecoderTest {
     @Test void rejectsUnexpectedChannelLayout() throws Exception {
         assertThrows(IllegalArgumentException.class, () -> HrirDecoder.decode(fixture(6, 48000, false), 48000));
     }
+    @Test void mirrorsHesuviSevenChannelFrontEarPair() throws Exception {
+        var impulses = HrirDecoder.decode(fixture(7, 48000, true), 48000);
+        assertEquals(.01f, impulses[0][64], 1e-6);
+        assertEquals(.02f, impulses[1][64], 1e-6);
+        assertArrayEquals(impulses[0], impulses[3]);
+        assertArrayEquals(impulses[1], impulses[2]);
+    }
     private Path fixture(int channels, int rate, boolean extensible) throws Exception {
         int frames = 256; int formatSize = extensible ? 40 : 16; int dataSize = frames * channels * 4;
         var buffer = ByteBuffer.allocate(12 + 8 + formatSize + 8 + dataSize).order(ByteOrder.LITTLE_ENDIAN);
