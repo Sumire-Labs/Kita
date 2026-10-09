@@ -33,7 +33,7 @@ public final class FxTwitterProvider implements PreviewProvider {
             }
             return new Preview("X", tweet.path("author").path("name").asText(), tweet.path("text").asText(),
                     link.uri().toString(), media, tweet.path("community_note").path("text").asText(),
-                    tweet.path("possibly_sensitive").asBoolean());
+                    tweet.path("possibly_sensitive").asBoolean()).withEngagement(EngagementParser.twitter(tweet));
         }
     }
 }

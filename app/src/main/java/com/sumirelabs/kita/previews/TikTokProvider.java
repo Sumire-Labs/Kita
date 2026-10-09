@@ -34,6 +34,7 @@ public final class TikTokProvider implements PreviewProvider {
         var thumbnail = data.path("thumbnail_url").asText();
         if (!thumbnail.startsWith("https://")) throw new IllegalStateException("TikTok public preview contains no poster");
         return new Preview("TikTok", data.path("author_name").asText(), data.path("title").asText(), url,
-                List.of(thumbnail), "プレビュー画像です。動画は投稿元で再生できます。", false, false);
+                List.of(thumbnail), "プレビュー画像です。動画は投稿元で再生できます。", false, false)
+                .withEngagement(EngagementParser.video(data, "tiktok"));
     }
 }

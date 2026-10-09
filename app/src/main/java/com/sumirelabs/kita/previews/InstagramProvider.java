@@ -38,7 +38,8 @@ public final class InstagramProvider implements PreviewProvider {
                 .stream().map(element -> element.absUrl("src")).filter(InstagramProvider::isMediaUrl)
                 .distinct().limit(10).toList();
         if (media.isEmpty()) throw new IllegalStateException("Instagram post image unavailable; login or a private post may be required");
-        return new Preview("Instagram", author == null ? "" : author.text(), text, canonical, media, "", false);
+        return new Preview("Instagram", author == null ? "" : author.text(), text, canonical, media, "", false)
+                .withEngagement(EngagementParser.instagram(page));
     }
 
     private static boolean isMediaUrl(String url) {

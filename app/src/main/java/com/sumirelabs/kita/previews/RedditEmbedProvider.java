@@ -59,7 +59,8 @@ public final class RedditEmbedProvider implements PreviewProvider {
         String title = metadata.path("title").asText();
         if (title.isBlank()) throw new IllegalStateException("Reddit public preview contains no title");
         boolean sensitive = !page.select("[nsfw=true], [data-nsfw=true], [spoiler=true], [data-spoiler=true]").isEmpty();
-        return new Preview("Reddit", "u/" + metadata.path("author_name").asText(), title, url, media, "", sensitive, false);
+        return new Preview("Reddit", "u/" + metadata.path("author_name").asText(), title, url, media, "", sensitive, false)
+                .withEngagement(EngagementParser.redditEmbed(metadata, page));
     }
 
     private static boolean isMediaUrl(String url) {

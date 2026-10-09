@@ -46,7 +46,8 @@ public final class RedditProvider implements PreviewProvider {
             String context = linkedComment ? comment.path("author").asText() + ": " + comment.path("body").asText() : "";
             return new Preview("Reddit", "u/" + post.path("author").asText(),
                     post.path("title").asText() + "\n" + post.path("selftext").asText(), link.uri().toString(), media,
-                    context, post.path("over_18").asBoolean() || post.path("spoiler").asBoolean());
+                    context, post.path("over_18").asBoolean() || post.path("spoiler").asBoolean())
+                    .withEngagement(EngagementParser.reddit(post));
         }
     }
 }

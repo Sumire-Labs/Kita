@@ -50,7 +50,7 @@ public final class YtDlpProvider implements PreviewProvider {
         return new Preview(link.platform(), data.path("uploader").asText(data.path("channel").asText()),
                 data.path("title").asText(data.path("description").asText()), link.uri().toString(),
                 media.stream().distinct().limit(10).toList(), playable ? "" : "プレビュー画像です。動画は投稿元で再生できます。",
-                data.path("age_limit").asInt() >= 18, playable);
+                data.path("age_limit").asInt() >= 18, playable).withEngagement(EngagementParser.video(data, link.platform()));
     }
 
     private static boolean collect(JsonNode data, List<String> media) {

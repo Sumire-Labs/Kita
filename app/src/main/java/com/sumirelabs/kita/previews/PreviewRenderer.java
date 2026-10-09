@@ -29,6 +29,8 @@ public final class PreviewRenderer {
             var note = Ui.safe(preview.context());
             container = Ui.append(container, TextDisplay.of("**補足**\n" + note.substring(0, Math.min(note.length(), 700))));
         }
+        var engagement = EngagementRenderer.render(preview);
+        if (!engagement.isBlank()) container = Ui.append(container, TextDisplay.of(engagement));
         container = Ui.append(container, ActionRow.of(Button.link(preview.url(), "投稿を開く")));
         return Ui.message(List.of(container));
     }
