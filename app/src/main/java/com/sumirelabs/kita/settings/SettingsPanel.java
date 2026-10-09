@@ -20,11 +20,12 @@ public final class SettingsPanel {
         var prefix = "settings:" + userId + ":";
         var navigation = StringSelectMenu.create(prefix + "page");
         navigation.addOption("概要", "home").addOption("EmbedPlacer", "previews")
-                .addOption("FlagTL", "translation").addOption("Ticket", "ticket");
+                .addOption("FlagTL", "translation").addOption("Ticket", "ticket").addOption("LogShare", "logshare");
         navigation.setDefaultValues(page);
         var container = Container.of(TextDisplay.of("## Kita Settings\n設定はこのサーバーにだけ適用されます。"),
                 ActionRow.of(navigation.build()));
         switch (page) {
+            case "logshare" -> container = com.sumirelabs.kita.logshare.LogShareSettings.append(container, prefix, settings);
             case "previews" -> {
                 var platforms = StringSelectMenu.create(prefix + "platforms").setPlaceholder("有効にするSNS")
                         .setMinValues(0).setMaxValues(PLATFORMS.size());
@@ -54,7 +55,8 @@ public final class SettingsPanel {
             default -> container = Ui.append(container, TextDisplay.of("### 機能の状態\nEmbedPlacer: "
                     + state(settings.enabled("previews.enabled")) + "\nFlagTL: "
                     + state(settings.enabled("translation.enabled")) + "\nTicket: "
-                    + state(settings.enabled("ticket.enabled")) + "\nカテゴリから設定を選択してください。"));
+                    + state(settings.enabled("ticket.enabled")) + "\nLogShare: "
+                    + state(settings.enabled("logshare.enabled")) + "\nカテゴリから設定を選択してください。"));
         }
         return Ui.message(List.of(container));
     }

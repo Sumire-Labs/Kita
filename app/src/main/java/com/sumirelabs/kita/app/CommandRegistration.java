@@ -13,7 +13,9 @@ public final class CommandRegistration extends ListenerAdapter {
         this.commands = List.copyOf(commands); this.developmentGuildId = developmentGuildId;
     }
     @Override public void onReady(ReadyEvent event) {
-        var definitions = commands.stream().map(Command::definition).toList();
+        var definitions = new java.util.ArrayList<>(commands.stream().map(Command::definition).toList());
+        definitions.add(net.dv8tion.jda.api.interactions.commands.build.Commands.message(com.sumirelabs.kita.logshare.LogShareListener.COMMAND)
+                .setContexts(net.dv8tion.jda.api.interactions.InteractionContextType.GUILD));
         var logger = LoggerFactory.getLogger(CommandRegistration.class);
         if (developmentGuildId == 0 && event.getJDA().getShardInfo().getShardId() == 0) {
             event.getJDA().updateCommands().addCommands(definitions)

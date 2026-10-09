@@ -46,9 +46,10 @@ public final class SettingsListener extends ListenerAdapter {
         else if (action.equals("platforms")) {
             for (var platform : SettingsPanel.PLATFORMS) changes.put("previews." + platform,
                     String.valueOf(event.getValues().contains(platform)));
-        } else if (java.util.Set.of("previews.enabled", "translation.enabled", "ticket.enabled").contains(action)) {
+        } else if (java.util.Set.of("previews.enabled", "translation.enabled", "ticket.enabled", "logshare.enabled", "logshare.auto").contains(action)) {
             changes.put(action, event.getValues().getFirst());
             if (action.startsWith("ticket")) page = "ticket";
+            if (action.startsWith("logshare")) page = "logshare";
         } else return;
         update(event, page, changes);
     }
@@ -56,6 +57,11 @@ public final class SettingsListener extends ListenerAdapter {
     @Override public void onEntitySelectInteraction(EntitySelectInteractionEvent event) {
         if (!authorized(event)) return;
         String action = event.getComponentId().split(":", 3)[2];
+        if (java.util.Set.of("logshare.channels", "logshare.roles").contains(action)) {
+            update(event, "logshare", Map.of(action, event.getValues().stream().map(value -> value.getId())
+                    .collect(java.util.stream.Collectors.joining(","))));
+            return;
+        }
         if (!java.util.Set.of("category", "role", "panel").contains(action)) return;
         update(event, "ticket", Map.of("ticket." + action, event.getValues().getFirst().getId()));
     }
@@ -97,6 +103,9 @@ public final class SettingsListener extends ListenerAdapter {
         event.deferEdit().queue(hook -> {
             if (!worker.submit(() -> {
                 try {
+                    if (event.getMember() == null || !event.getMember().hasPermission(Permission.MANAGE_SERVER)) {
+                        hook.sendMessage(Ui.text("Settings", "サーバー管理権限が必要です。")).setEphemeral(true).queue(); return;
+                    }
                     var settings = changes.isEmpty() ? repository.get(event.getGuild().getIdLong())
                             : repository.update(event.getGuild().getIdLong(), changes);
                     hook.editOriginal(Ui.edit(SettingsPanel.render(settings, event.getUser().getIdLong(), page))).queue();

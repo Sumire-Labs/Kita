@@ -8,6 +8,30 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 @EnabledIfEnvironmentVariable(named = "KITA_TEST_DB_URL", matches = ".+")
 class MariaDbIntegrationTest {
+    @Test void logShareLeasesAreAtomicGuildScopedAndSurviveRepositoryRecreation() throws Exception {
+        try (var database = new Database(System.getenv("KITA_TEST_DB_URL"), System.getenv("KITA_TEST_DB_USER"),
+                System.getenv("KITA_TEST_DB_PASSWORD"))) {
+            var repository = new JdbcLogShareRepository(database.source());
+            long guild = System.nanoTime();
+            var key = new com.sumirelabs.kita.logshare.LogShareRepository.Key(guild, 1, "attachment");
+            var wins = new java.util.concurrent.atomic.AtomicInteger();
+            try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+                for (int i = 0; i < 16; i++) futures.add(executor.submit(() -> { if (repository.claim(key)) wins.incrementAndGet(); }));
+                for (var future : futures) future.get();
+            }
+            assertEquals(1, wins.get());
+            repository.uploaded(key, "https://mclo.gs/test"); repository.release(key);
+            var restarted = new JdbcLogShareRepository(database.source());
+            assertEquals("https://mclo.gs/test", restarted.find(key).orElseThrow().url());
+            assertTrue(restarted.claim(key)); restarted.replied(key, 100); restarted.release(key);
+            assertFalse(restarted.claim(key));
+            assertEquals(100, restarted.find(key).orElseThrow().replyId());
+            var other = new com.sumirelabs.kita.logshare.LogShareRepository.Key(guild + 1, 1, "attachment");
+            assertTrue(restarted.find(other).isEmpty()); assertTrue(restarted.claim(other)); restarted.release(other);
+        }
+    }
+
     @Test void guildIsolationAtomicMergingAndTicketLifecycle() throws Exception {
         try (var database = new Database(System.getenv("KITA_TEST_DB_URL"), System.getenv("KITA_TEST_DB_USER"),
                 System.getenv("KITA_TEST_DB_PASSWORD"))) {

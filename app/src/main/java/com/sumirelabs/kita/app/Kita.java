@@ -6,6 +6,7 @@ import com.sumirelabs.kita.music.PlayerRefresh;
 import com.sumirelabs.kita.storage.Database;
 import com.sumirelabs.kita.storage.JdbcSettingsRepository;
 import com.sumirelabs.kita.storage.JdbcTicketRepository;
+import com.sumirelabs.kita.storage.JdbcLogShareRepository;
 import com.sumirelabs.kita.tickets.TicketRecovery;
 import dev.arbjerg.lavalink.libraries.jda.JDAVoiceUpdateListener;
 import dev.arbjerg.lavalink.client.Helpers;
@@ -61,7 +62,7 @@ public final class Kita implements AutoCloseable {
         if (music != null) builder.setVoiceDispatchInterceptor(new JDAVoiceUpdateListener(music.client()));
         builder.addEventListeners(FeatureWiring.listeners(config, new JdbcSettingsRepository(database.source()),
                 new JdbcTicketRepository(database.source()), worker, music,
-                id -> shards == null ? null : shards.getGuildById(id), buildVersion));
+                id -> shards == null ? null : shards.getGuildById(id), buildVersion, new JdbcLogShareRepository(database.source())));
         shards = builder.build();
         presence.start(shards);
         ticketRecovery = new TicketRecovery(new JdbcTicketRepository(database.source()), shards::getGuildById, worker);

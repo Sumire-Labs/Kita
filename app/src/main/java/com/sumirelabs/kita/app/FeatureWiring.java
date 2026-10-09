@@ -11,6 +11,8 @@ import com.sumirelabs.kita.discord.WorkExecutor;
 import com.sumirelabs.kita.music.MusicCommand;
 import com.sumirelabs.kita.music.MusicListener;
 import com.sumirelabs.kita.music.MusicService;
+import com.sumirelabs.kita.logshare.LogShareRepository;
+import com.sumirelabs.kita.logshare.LogShareListener;
 import com.sumirelabs.kita.previews.FxTwitterProvider;
 import com.sumirelabs.kita.previews.InstagramProvider;
 import com.sumirelabs.kita.previews.TikTokProvider;
@@ -34,13 +36,14 @@ import net.dv8tion.jda.api.entities.Guild;
 public final class FeatureWiring {
     private FeatureWiring() {}
     public static Object[] listeners(KitaConfig config, SettingsRepository settings, TicketRepository tickets,
-                                     WorkExecutor worker, MusicService music, LongFunction<Guild> guilds, String version) {
+                                     WorkExecutor worker, MusicService music, LongFunction<Guild> guilds, String version, LogShareRepository logs) {
         var service = new TicketService(settings, tickets,
                 new TicketTranscript(Path.of(config.dataDirectory()).resolve("transcripts")), guilds);
         var commands = new ArrayList<Command>();
         commands.add(new PingCommand()); commands.add(new AvatarCommand()); commands.add(new FastFetchCommand(version));
         commands.add(new SettingsCommand(settings)); commands.add(new TicketCommand(settings));
         var listeners = new ArrayList<Object>();
+        listeners.add(new LogShareListener(settings, logs, worker, version));
         if (music != null) {
             for (var name : new String[]{"play", "stop", "skip", "player"}) commands.add(new MusicCommand(music, name));
             listeners.add(new MusicListener(music, worker));
