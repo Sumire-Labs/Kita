@@ -1,0 +1,46 @@
+plugins {
+    id 'base'
+    id 'com.cleanroommc.versioning' version '3.3.0'
+    id 'com.cleanroommc.tokenenvoy' version '3.0.0' apply false
+}
+ext {
+    jdaVersion = '6.7.0'
+    jacksonVersion = '2.22.3'
+}
+subprojects {
+    apply plugin: 'java-library'
+    group = 'com.sumirelabs'
+    version = rootProject.version
+    java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.compilerArgs += ['-Xlint:all,-processing']
+    }
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:6.1.3')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+    tasks.withType(Test).configureEach { useJUnitPlatform() }
+    dependencyLocking { lockAllConfigurations() }
+}
+tasks.register('checkArchitecture') {
+    def sources = fileTree('.') {
+        include '**/*.java', '**/*.gradle', '**/*.yml', '**/*.md'
+        exclude '**/build/**', '**/.gradle/**', '.tools/**'
+    }
+    inputs.files(sources)
+    doLast {
+        sources.each { file ->
+            if (file.readLines('UTF-8').size() > 160) {
+                throw new GradleException("File exceeds 160 lines: ${file}")
+            }
+            if (file.name.endsWith('.java') &&
+                    file.text =~ /\b(EmbedBuilder|MessageEmbed|setEmbeds|addEmbeds|replyEmbeds|sendMessageEmbeds)\b/) {
+                throw new GradleException("Embeds forbidden: ${file}")
+            }
+        }
+    }
+}
+tasks.named('check') { dependsOn 'checkArchitecture', subprojects.collect { it.tasks.named('check') } }
+apply from: 'gradle/release.gradle'

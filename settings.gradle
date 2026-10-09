@@ -1,0 +1,12 @@
+pluginManagement {
+    repositories { gradlePluginPortal(); maven { url = 'https://maven.cleanroommc.com' } }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.lavalink.dev/releases' }
+    }
+}
+rootProject.name = 'kita'
+include 'app', 'common', 'audio'

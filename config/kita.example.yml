@@ -1,0 +1,20 @@
+bot:
+  token: "${DISCORD_TOKEN}"
+  shards: 0 # 0 = Discordの推奨値で自動シャーディング
+  developmentGuildId: 0 # 開発サーバーIDを指定するとコマンドをそのサーバーだけに登録
+database:
+  url: "${JDBC_URL:-jdbc:mariadb://database:3306/kita}"
+  user: kita
+  password: "${MARIADB_PASSWORD}"
+deepl:
+  key: "${DEEPL_KEY:-}"
+  maxCharacters: 3000
+  flagLanguages: {} # 例: HK: ZH-HANT, CA: FR
+music:
+  enabled: true
+  uri: "${LAVALINK_URI:-http://lavalink:2333}"
+  password: "${LAVALINK_PASSWORD}"
+  presetsDirectory: "${PRESETS_DIRECTORY:-presets}"
+previews:
+  ytDlp: "${YT_DLP:-yt-dlp}"
+dataDirectory: "${DATA_DIRECTORY:-data}"

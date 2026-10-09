@@ -1,0 +1,26 @@
+plugins {
+    id 'com.gradleup.shadow' version '9.6.1'
+    id 'com.cleanroommc.tokenenvoy'
+}
+// Lavalink 4.2.2's Spring scanner cannot read Java 25 class files.
+// Compile with JDK 25, emitting Java 21 bytecode only for the plugin boundary.
+tasks.withType(JavaCompile).configureEach { options.release = 21 }
+dependencies {
+    compileOnly 'dev.arbjerg.lavalink:plugin-api:4.2.2'
+    implementation project(':common')
+    implementation 'com.github.wendykierp:JTransforms:3.2'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.3.0'
+    testImplementation 'dev.arbjerg.lavalink:plugin-api:4.2.2'
+}
+tokenEnvoy {
+    set 'VERSION', rootProject.version.toString()
+    main { resources { include 'lavalink-plugins/kita-audio.properties' } }
+}
+tasks.named('shadowJar') {
+    archiveFileName = 'kita-audio.jar'
+    relocate 'org.jtransforms', 'com.sumirelabs.kita.audio.internal.fft'
+    relocate 'pl.edu.icm.jlargearrays', 'com.sumirelabs.kita.audio.internal.arrays'
+    relocate 'com.github.benmanes.caffeine', 'com.sumirelabs.kita.audio.internal.cache'
+    mergeServiceFiles()
+}
+tasks.named('assemble') { dependsOn 'shadowJar' }

@@ -1,0 +1,131 @@
+package com.sumirelabs.kita.music;
+
+import com.sumirelabs.kita.common.PresetFiles;
+import com.sumirelabs.kita.discord.WorkExecutor;
+import dev.arbjerg.lavalink.client.LavalinkClient;
+import dev.arbjerg.lavalink.client.NodeOptions;
+import dev.arbjerg.lavalink.client.event.TrackEndEvent;
+import dev.arbjerg.lavalink.client.player.FilterBuilder;
+import dev.arbjerg.lavalink.client.player.LavalinkPlayer;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+public final class MusicService implements AutoCloseable {
+    private static final Duration TIMEOUT = Duration.ofSeconds(20);
+    private final LavalinkClient client;
+    private final Map<Long, MusicSession> sessions = new ConcurrentHashMap<>();
+    private final List<PresetFiles.Preset> presets;
+    private final MusicLoader loader;
+    public MusicService(long userId, String uri, String password, Path presetDirectory, WorkExecutor worker) throws Exception {
+        presets = PresetFiles.scan(presetDirectory);
+        client = new LavalinkClient(userId);
+        loader = new MusicLoader(client);
+        client.addNode(new NodeOptions.Builder().setName("main").setServerUri(uri).setPassword(password).build());
+        client.on(TrackEndEvent.class).subscribe(event -> worker.submit(() -> {
+            var session = sessions.get(event.getGuildId());
+            if (session == null || !event.getEndReason().getMayStartNext()) return;
+            synchronized (session) {
+                var current = session.queue.current();
+                if (current == null || !session.playbackId.equals(event.getTrack().getUserData().path("kitaPlaybackId").asText())) return;
+                boolean natural = event.getEndReason().name().equals("FINISHED");
+                var snapshot = session.queue.snapshot();
+                try { start(event.getGuildId(), session.queue.next(natural), session); }
+                catch (RuntimeException error) { session.queue.restore(snapshot); throw error; }
+            }
+        }));
+    }
+
+    public LavalinkClient client() { return client; }
+    public MusicSession session(long guildId) { return sessions.computeIfAbsent(guildId, ignored -> new MusicSession()); }
+    public List<PresetFiles.Preset> presets() { return presets; }
+    public LavalinkPlayer player(long guildId) {
+        var link = client.getLinkIfCached(guildId);
+        return link == null ? null : link.getCachedPlayer();
+    }
+
+    public int enqueue(long guildId, String query) throws Exception {
+        return add(guildId, loader.load(guildId, query));
+    }
+
+    private int add(long guildId, List<dev.arbjerg.lavalink.client.player.Track> tracks) {
+        if (tracks.isEmpty()) throw new IllegalArgumentException("再生可能な音源が見つかりませんでした。");
+        var session = session(guildId);
+        synchronized (session) {
+            var snapshot = session.queue.snapshot();
+            try {
+                session.queue.add(tracks);
+                if (session.queue.current() == null) start(guildId, session.queue.next(false), session);
+            } catch (RuntimeException error) { session.queue.restore(snapshot); throw error; }
+        }
+        return tracks.size();
+    }
+
+    private void start(long guildId, dev.arbjerg.lavalink.client.player.Track track, MusicSession session) {
+        var update = client.getOrCreateLink(guildId).createOrUpdatePlayer().setVolume(session.volume).setPaused(false);
+        var previousId = session.playbackId;
+        var playbackId = java.util.UUID.randomUUID().toString();
+        if (track == null) update.stopTrack();
+        else {
+            var playing = track.makeClone();
+            playing.setUserData(Map.of("kitaPlaybackId", playbackId));
+            update.setTrack(playing);
+        }
+        session.playbackId = playbackId;
+        try { update.block(TIMEOUT); }
+        catch (RuntimeException error) { session.playbackId = previousId; throw error; }
+    }
+
+    public void action(long guildId, String action, long value) {
+        var session = session(guildId);
+        synchronized (session) {
+            var snapshot = session.queue.snapshot();
+            try {
+            switch (action) {
+                case "skip" -> start(guildId, session.queue.next(false), session);
+                case "back" -> start(guildId, session.queue.previous(), session);
+                case "stop" -> { start(guildId, null, session); session.queue.clear(); session.voiceChannel = 0; }
+                case "loop" -> session.queue.cycleLoop();
+                case "pause" -> {
+                    var player = player(guildId);
+                    if (player == null || player.getTrack() == null) throw new IllegalArgumentException("再生中の曲はありません。");
+                    player.setPaused(!player.getPaused()).block(TIMEOUT);
+                }
+                case "volume" -> {
+                    if (value < 0 || value > 100) throw new IllegalArgumentException("音量は0〜100です。");
+                    client.getOrCreateLink(guildId).createOrUpdatePlayer().setVolume((int) value).block(TIMEOUT);
+                    session.volume = (int) value;
+                }
+                case "seek" -> {
+                    var player = player(guildId);
+                    if (player == null || player.getTrack() == null || !player.getTrack().getInfo().isSeekable()) {
+                        throw new IllegalArgumentException("この曲はシークできません。");
+                    }
+                    player.setPosition(Math.clamp(value, 0, player.getTrack().getInfo().getLength())).block(TIMEOUT);
+                }
+                default -> throw new IllegalArgumentException("不明な操作です。");
+            }
+            } catch (RuntimeException error) { session.queue.restore(snapshot); throw error; }
+        }
+    }
+
+    public void preset(long guildId, String id) {
+        if (!id.equals("off") && presets.stream().noneMatch(p -> p.id().equals(id))) throw new IllegalArgumentException("不明なプリセットです。");
+        var session = session(guildId);
+        synchronized (session) {
+            var filters = new FilterBuilder().setPluginFilter("kitaHrir", Map.of("preset", id)).build();
+            client.getOrCreateLink(guildId).createOrUpdatePlayer().setFilters(filters).block(TIMEOUT);
+            session.preset = id;
+        }
+    }
+
+    public void forget(long guildId) {
+        sessions.remove(guildId);
+        var link = client.getLinkIfCached(guildId);
+        if (link != null) link.destroy().subscribe();
+    }
+    public Map<Long, MusicSession> sessions() { return Map.copyOf(sessions); }
+    @Override public void close() { client.close(); }
+}

@@ -1,0 +1,3 @@
+// Shared types have no third-party runtime dependencies.
+// Use JDK 25 while emitting bytecode compatible with the Lavalink plugin boundary.
+tasks.withType(JavaCompile).configureEach { options.release = 21 }

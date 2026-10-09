@@ -1,0 +1,90 @@
+name: Build Kita
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      version:
+        value: ${{ jobs.build.outputs.version }}
+      stage:
+        value: ${{ jobs.build.outputs.stage }}
+      prerelease:
+        value: ${{ jobs.build.outputs.prerelease }}
+      artifact:
+        value: ${{ jobs.build.outputs.artifact }}
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      stage: ${{ steps.metadata.outputs.stage }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+      artifact: ${{ steps.metadata.outputs.artifact }}
+    services:
+      mariadb:
+        image: mariadb:11.8.9
+        env:
+          MARIADB_DATABASE: kita_test
+          MARIADB_USER: kita_test
+          MARIADB_PASSWORD: integration-only
+          MARIADB_ROOT_PASSWORD: integration-root-only
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Test and package
+        run: bash ./gradlew clean releaseBundle --no-daemon --console=plain
+        env:
+          KITA_TEST_DB_URL: jdbc:mariadb://localhost:3306/kita_test
+          KITA_TEST_DB_USER: kita_test
+          KITA_TEST_DB_PASSWORD: integration-only
+          KITA_TEST_FFMPEG: "true"
+      - name: Read build metadata
+        id: metadata
+        shell: bash
+        run: |
+          version="$(jq -r '.version' build/release/build-info.json)"
+          stage="$(jq -r '.stage' build/release/build-info.json)"
+          prerelease="$(jq -r '.prerelease' build/release/build-info.json)"
+          artifact="kita-${version}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf 'version=%s\nstage=%s\nprerelease=%s\nartifact=%s\n' \
+            "$version" "$stage" "$prerelease" "$artifact" >> "$GITHUB_OUTPUT"
+      - name: Save build artifacts
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ${{ steps.metadata.outputs.artifact }}
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Save test reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            app/build/reports/tests/test/
+            app/build/test-results/test/
+            audio/build/reports/tests/test/
+            audio/build/test-results/test/
+          if-no-files-found: ignore
+          retention-days: 14

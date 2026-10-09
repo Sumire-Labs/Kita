@@ -1,0 +1,9 @@
+.tools
+.gradle
+**/build
+.env
+config/kita.yml
+data
+presets
+.idea
+# Git history is included because Cleanroom Versioning derives the version from it.

@@ -1,0 +1,14 @@
+.gradle/
+**/build/
+.tools/
+.idea/
+*.iml
+.env
+config/kita.yml
+data/
+!data/.gitkeep
+presets/**
+!presets/.gitkeep
+docs/**
+!docs/architecture.md
+AGENTS.md

@@ -1,0 +1,53 @@
+server:
+  port: 2333
+  address: 0.0.0.0
+lavalink:
+  plugins:
+    - dependency: dev.lavalink.youtube:youtube-plugin:1.18.2
+      repository: https://maven.lavalink.dev/releases
+    - dependency: com.github.topi314.lavasrc:lavasrc-plugin:4.8.3
+      repository: https://maven.lavalink.dev/releases
+  server:
+    password: ${LAVALINK_SERVER_PASSWORD}
+    sources:
+      youtube: false
+      soundcloud: true
+      bandcamp: false
+      twitch: false
+      vimeo: false
+      http: false
+      local: false
+    filters:
+      volume: true
+    bufferDurationMs: 400
+    frameBufferDurationMs: 1000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+    trackStuckThresholdMs: 10000
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients: [MUSIC, ANDROID_VR, WEB, WEBEMBEDDED]
+  lavasrc:
+    providers:
+      - 'ytsearch:"%ISRC%"'
+      - ytsearch:%QUERY%
+    sources:
+      spotify: true
+      applemusic: false # Kita側の公開ページ解析でAPIキーなしに対応
+      deezer: false
+      yandexmusic: false
+      youtube: false
+    spotify:
+      countryCode: JP
+      playlistLoadLimit: 10
+      albumLoadLimit: 10
+kita:
+  hrir:
+    directory: /opt/kita/presets
+logging:
+  level:
+    root: INFO

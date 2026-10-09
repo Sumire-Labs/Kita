@@ -1,0 +1,95 @@
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
+import org.gradle.api.file.FileSystemOperations
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.*
+import javax.inject.Inject
+
+abstract class KitaReleaseBundle extends DefaultTask {
+    @Input abstract Property<String> getVersionName()
+    @Input abstract Property<String> getStageName()
+    @Input abstract Property<String> getRevision()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getAppArchive()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getAudioArchive()
+    @OutputDirectory abstract DirectoryProperty getDestination()
+    @Inject abstract FileSystemOperations getFileOperations()
+
+    @TaskAction void bundle() {
+        def version = versionName.get()
+        def stage = stageName.get()
+        if (!(stage in ['alpha', 'beta', 'rc', 'release'])) throw new GradleException('Invalid release stage')
+        def zip = appArchive.get().asFile
+        def jar = audioArchive.get().asFile
+        verifyApp(zip, version)
+        verifyAudio(jar, version)
+        def folder = destination.get().asFile
+        def audioName = "kita-audio-${version}.jar".toString()
+        fileOperations.sync { spec ->
+            spec.into(folder)
+            spec.from(zip)
+            spec.from(jar) { copy -> copy.rename { audioName } }
+        }
+        def assets = [zip.name, audioName].sort()
+        def checksums = assets.collect { name -> "${KitaReleaseBundle.sha256(new File(folder, name))}  ${name}" }.join('\n') + '\n'
+        new File(folder, 'SHA256SUMS').setText(checksums, 'UTF-8')
+        def metadata = [version: version, stage: stage, prerelease: stage != 'release',
+                        revision: revision.get(), files: assets]
+        new File(folder, 'build-info.json').setText(JsonOutput.prettyPrint(JsonOutput.toJson(metadata)) + '\n', 'UTF-8')
+    }
+
+    private static void verifyAudio(File jar, String version) {
+        new ZipFile(jar).withCloseable { archive ->
+            def entry = archive.getEntry('lavalink-plugins/kita-audio.properties')
+            if (entry == null) throw new GradleException('Audio plugin manifest is missing')
+            archive.getInputStream(entry).withCloseable { input -> verifyVersion(input, version) }
+        }
+    }
+
+    private static void verifyApp(File zip, String version) {
+        new ZipFile(zip).withCloseable { archive ->
+            def entry = archive.entries().find { it.name.endsWith("/lib/app-${version}.jar") }
+            if (entry == null) throw new GradleException('Application jar is missing from distribution')
+            new ZipInputStream(archive.getInputStream(entry)).withCloseable { nested ->
+                def resource
+                while ((resource = nested.nextEntry) != null) {
+                    if (resource.name == 'kita-build.properties') { verifyVersion(nested, version); return }
+                }
+                throw new GradleException('Application build metadata is missing')
+            }
+        }
+    }
+
+    private static void verifyVersion(InputStream input, String version) {
+        def properties = new Properties()
+        properties.load(input)
+        if (properties.getProperty('version') != version) {
+            throw new GradleException('TokenEnvoy output does not match the release version')
+        }
+    }
+
+    private static String sha256(File file) {
+        def digest = MessageDigest.getInstance('SHA-256')
+        file.withInputStream { input ->
+            def buffer = new byte[65536]
+            int count
+            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count)
+        }
+        return HexFormat.of().formatHex(digest.digest())
+    }
+}
+
+tasks.register('releaseBundle', KitaReleaseBundle) {
+    group = 'distribution'
+    description = 'Builds tested release assets and verifies embedded version metadata.'
+    dependsOn 'check', ':app:distZip', ':audio:shadowJar'
+    versionName.set(project.version.toString())
+    stageName.set(versioning.stage.map { it.id() })
+    revision.set(providers.exec { commandLine 'git', 'rev-parse', 'HEAD' }.standardOutput.asText.map { it.trim() })
+    appArchive.set(project(':app').layout.buildDirectory.file("distributions/kita-${project.version}.zip"))
+    audioArchive.set(project(':audio').layout.buildDirectory.file('libs/kita-audio.jar'))
+    destination.set(layout.buildDirectory.dir('release'))
+}

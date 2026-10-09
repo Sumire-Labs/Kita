@@ -1,0 +1,74 @@
+name: kita
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: docker/bot.Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?Set DISCORD_TOKEN in .env}
+      DEEPL_KEY: ${DEEPL_KEY:-}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD in .env}
+      LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in .env}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70 -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED
+    volumes:
+      - ./config/kita.yml:/opt/kita/config/kita.yml:ro
+      - ./presets:/opt/kita/presets:ro
+      - ./data:/opt/kita/data
+    depends_on:
+      database:
+        condition: service_healthy
+      lavalink:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, -fsS, http://localhost:8080/health]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    mem_limit: 3g
+    stop_grace_period: 45s
+    logging:
+      options: {max-size: 10m, max-file: "3"}
+  database:
+    image: mariadb:11.8.9
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: kita
+      MARIADB_USER: kita
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Set MARIADB_ROOT_PASSWORD in .env}
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 2g
+    logging:
+      options: {max-size: 10m, max-file: "3"}
+  lavalink:
+    build:
+      context: .
+      dockerfile: docker/lavalink.Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in .env}
+      JAVA_TOOL_OPTIONS: -Xmx3g -Dfile.encoding=UTF-8 --enable-native-access=ALL-UNNAMED
+    volumes:
+      - ./config/lavalink.yml:/opt/lavalink/application.yml:ro
+      - ./presets:/opt/kita/presets:ro
+    healthcheck:
+      test: [CMD-SHELL, 'curl -fsS -H "Authorization: $$LAVALINK_SERVER_PASSWORD" http://localhost:2333/version']
+      interval: 15s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+    mem_limit: 4g
+    logging:
+      options: {max-size: 10m, max-file: "3"}
+volumes:
+  database:

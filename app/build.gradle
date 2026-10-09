@@ -1,0 +1,36 @@
+plugins {
+    id 'application'
+    id 'com.cleanroommc.tokenenvoy'
+}
+application { mainClass = 'com.sumirelabs.kita.app.Kita' }
+tasks.named('distZip') { archiveBaseName = 'kita' }
+distributions {
+    main {
+        contents {
+            from(rootProject.file('LICENSE.md'))
+            from(rootProject.file('docs/distribution.md')) { into 'docs' }
+            from(rootProject.file('config/kita.example.yml')) { into 'config' }
+        }
+    }
+}
+dependencies {
+    implementation project(':common')
+    implementation "net.dv8tion:JDA:${jdaVersion}"
+    implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${jacksonVersion}"
+    implementation 'org.slf4j:slf4j-api:2.0.20'
+    implementation 'com.zaxxer:HikariCP:7.1.0'
+    implementation 'org.mariadb.jdbc:mariadb-java-client:3.5.10'
+    implementation 'org.flywaydb:flyway-core:13.10.0'
+    implementation 'org.flywaydb:flyway-mysql:13.10.0'
+    implementation 'com.github.oshi:oshi-core:7.7.0'
+    implementation 'com.deepl.api:deepl-java:1.17.0'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.3.0'
+    implementation 'dev.arbjerg:lavalink-client:3.4.0'
+    implementation 'org.jsoup:jsoup:1.23.2'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.20'
+}
+tokenEnvoy {
+    set 'VERSION', rootProject.version.toString()
+    main { resources { include 'kita-build.properties' } }
+}
