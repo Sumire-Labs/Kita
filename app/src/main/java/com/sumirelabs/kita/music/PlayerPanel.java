@@ -24,7 +24,7 @@ public final class PlayerPanel {
             String queue = session.queue.upcoming().stream().limit(5)
                     .map(t -> "• " + shortTitle(t.getInfo().getTitle())).collect(java.util.stream.Collectors.joining("\n"));
             var volume = StringSelectMenu.create("music:volume").setPlaceholder("音量");
-            for (int level : new int[]{0, 10, 25, 50, 75, 100}) volume.addOption(level + "%", String.valueOf(level));
+            for (int level = 0; level <= 100; level += 5) volume.addOption(level + "%", String.valueOf(level));
             volume.setDefaultValues(String.valueOf(session.volume));
             var preset = StringSelectMenu.create("music:preset").setPlaceholder("HRIRプリセット").addOption("無効", "off");
             int start = session.presetPage * 24;
