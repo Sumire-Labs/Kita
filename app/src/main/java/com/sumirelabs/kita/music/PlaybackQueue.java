@@ -43,6 +43,7 @@ public final class PlaybackQueue<T> {
     public synchronized List<T> upcoming() { return List.copyOf(upcoming); }
     public synchronized Loop loop() { return loop; }
     public synchronized void cycleLoop() { loop = Loop.values()[(loop.ordinal() + 1) % Loop.values().length]; }
+    public synchronized void toggleLoop(Loop mode) { loop = loop == mode ? Loop.OFF : mode; }
     public synchronized Snapshot<T> snapshot() { return new Snapshot<>(current, List.copyOf(upcoming), List.copyOf(history), loop); }
     public synchronized void restore(Snapshot<T> snapshot) {
         current = snapshot.current(); loop = snapshot.loop();

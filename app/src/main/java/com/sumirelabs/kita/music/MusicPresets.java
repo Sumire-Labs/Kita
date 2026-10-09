@@ -17,7 +17,7 @@ final class MusicPresets {
         String requested = configured == null ? "off" : configured.strip();
         var selected = entries.stream().filter(p -> p.fileName().equalsIgnoreCase(requested) || p.id().equals(requested)).findFirst();
         defaultId = selected.map(Preset::id).orElse("off");
-        defaultPage = selected.map(p -> entries.indexOf(p) / 24).orElse(0);
+        defaultPage = selected.map(p -> entries.indexOf(p) / PresetSelector.PAGE_SIZE).orElse(0);
         if (!requested.isBlank() && !requested.equals("off") && selected.isEmpty()) {
             LoggerFactory.getLogger(MusicPresets.class).warn("Default HRIR preset '{}' was not found; using off", requested);
         }

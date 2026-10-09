@@ -7,9 +7,27 @@ public final class MusicSession {
     int volume = 10;
     String preset = "off";
     int presetPage;
-    long panelChannel;
-    long panelMessage;
+    private long panelChannel;
+    private long panelMessage;
+    private long refreshingPanel;
     long voiceChannel;
     String playbackId = "";
     String playbackError = "";
+
+    record Panel(long channelId, long messageId) {}
+    synchronized Panel replacePanel(long channelId, long messageId) {
+        var previous = new Panel(panelChannel, panelMessage);
+        panelChannel = channelId; panelMessage = messageId;
+        return previous;
+    }
+    synchronized boolean isCurrentPanel(long messageId) { return messageId != 0 && panelMessage == messageId; }
+    synchronized Panel beginPanelRefresh() {
+        if (panelMessage == 0 || refreshingPanel == panelMessage) return null;
+        refreshingPanel = panelMessage;
+        return new Panel(panelChannel, panelMessage);
+    }
+    synchronized void finishPanelRefresh(long messageId, boolean deleted) {
+        if (refreshingPanel == messageId) refreshingPanel = 0;
+        if (deleted && panelMessage == messageId) panelMessage = 0;
+    }
 }

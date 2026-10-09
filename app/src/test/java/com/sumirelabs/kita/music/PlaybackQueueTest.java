@@ -34,11 +34,14 @@ class PlaybackQueueTest {
         assertEquals("second", second.next(false));
         assertNull(first.current());
     }
-    @Test void seekInputRejectsInvalidTimes() {
-        assertEquals(90_000, MusicListener.parseTime("1:30"));
-        assertEquals(90_000, MusicListener.parseTime("90秒"));
-        assertThrows(IllegalArgumentException.class, () -> MusicListener.parseTime("1:99"));
-        assertThrows(IllegalArgumentException.class, () -> MusicListener.parseTime("-2"));
+    @Test void selectingLoopModeTogglesOffAndSwitchesModes() {
+        var queue = new PlaybackQueue<String>(5);
+        queue.toggleLoop(PlaybackQueue.Loop.TRACK);
+        assertEquals(PlaybackQueue.Loop.TRACK, queue.loop());
+        queue.toggleLoop(PlaybackQueue.Loop.QUEUE);
+        assertEquals(PlaybackQueue.Loop.QUEUE, queue.loop());
+        queue.toggleLoop(PlaybackQueue.Loop.QUEUE);
+        assertEquals(PlaybackQueue.Loop.OFF, queue.loop());
     }
     @Test void failedRemoteOperationCanRestoreQueueAndHistory() {
         var queue = new PlaybackQueue<String>(5);

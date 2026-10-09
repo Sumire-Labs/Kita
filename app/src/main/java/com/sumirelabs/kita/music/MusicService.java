@@ -82,7 +82,8 @@ public final class MusicService implements AutoCloseable {
                 case "skip" -> start(guildId, session.queue.next(false), session);
                 case "back" -> start(guildId, session.queue.previous(), session);
                 case "stop" -> { start(guildId, null, session); session.queue.clear(); session.voiceChannel = 0; }
-                case "loop" -> session.queue.cycleLoop();
+                case "loop-track" -> session.queue.toggleLoop(PlaybackQueue.Loop.TRACK);
+                case "loop-queue" -> session.queue.toggleLoop(PlaybackQueue.Loop.QUEUE);
                 case "pause" -> {
                     if (!session.playbackError.isEmpty() && session.queue.current() != null) {
                         start(guildId, session.queue.current(), session);

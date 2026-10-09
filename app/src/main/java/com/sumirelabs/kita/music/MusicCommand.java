@@ -23,11 +23,7 @@ public final class MusicCommand implements Command {
 
     @Override public void execute(CommandContext context) throws Exception {
         if (name.equals("player")) {
-            var panel = PlayerPanel.render(music, context.guild().getIdLong());
-            if (context.slash() == null) { context.reply(panel); return; }
-            var message = context.slash().getHook().sendMessage(panel).complete();
-            var session = music.session(context.guild().getIdLong());
-            synchronized (session) { session.panelChannel = message.getChannelIdLong(); session.panelMessage = message.getIdLong(); }
+            PlayerPanels.publish(context, music);
             return;
         }
         var voice = MusicAccess.requireVoice(context.member());
