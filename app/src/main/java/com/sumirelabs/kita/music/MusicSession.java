@@ -3,6 +3,7 @@ package com.sumirelabs.kita.music;
 import dev.arbjerg.lavalink.client.player.Track;
 
 public final class MusicSession {
+    private final java.util.concurrent.locks.ReentrantLock operations = new java.util.concurrent.locks.ReentrantLock(true);
     final PlaybackQueue<Track> queue = new PlaybackQueue<>(1000);
     int volume = 10;
     String preset = "off";
@@ -15,6 +16,11 @@ public final class MusicSession {
     String playbackError = "";
 
     record Panel(long channelId, long messageId) {}
+    void operate(Runnable action) {
+        operations.lock();
+        try { action.run(); }
+        finally { operations.unlock(); }
+    }
     synchronized Panel replacePanel(long channelId, long messageId) {
         var previous = new Panel(panelChannel, panelMessage);
         panelChannel = channelId; panelMessage = messageId;

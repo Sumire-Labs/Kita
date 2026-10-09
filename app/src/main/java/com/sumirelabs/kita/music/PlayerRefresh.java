@@ -18,9 +18,9 @@ public final class PlayerRefresh implements AutoCloseable {
         scheduler.scheduleWithFixedDelay(() -> {
             for (var entry : music.sessions().entrySet()) {
                 var session = entry.getValue();
-                var panel = session.beginPanelRefresh();
-                if (panel == null) continue;
                 if (!worker.submit(() -> {
+                    var panel = session.beginPanelRefresh();
+                    if (panel == null) return;
                     try {
                         var guild = guilds.apply(entry.getKey());
                         var channel = guild == null ? null : guild.getChannelById(GuildMessageChannel.class, panel.channelId());
@@ -42,7 +42,7 @@ public final class PlayerRefresh implements AutoCloseable {
                         session.finishPanelRefresh(panel.messageId(), false);
                         LoggerFactory.getLogger(PlayerRefresh.class).warn("Player refresh failed in guild {}", entry.getKey());
                     }
-                })) session.finishPanelRefresh(panel.messageId(), false);
+                })) LoggerFactory.getLogger(PlayerRefresh.class).debug("Player refresh skipped: worker busy");
             }
         }, 15, 15, TimeUnit.SECONDS);
     }

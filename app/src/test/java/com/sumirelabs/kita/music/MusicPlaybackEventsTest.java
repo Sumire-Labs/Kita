@@ -28,7 +28,10 @@ class MusicPlaybackEventsTest {
         session.queue.add(List.of(first, second)); session.queue.next(false); session.playbackId = "current";
         MusicPlaybackEvents.ended(session, first, "STOPPED", () -> fail("Manual stop is not a natural end"));
         MusicPlaybackEvents.ended(session, first, "REPLACED", () -> fail("Replacement already started another track"));
-        MusicPlaybackEvents.ended(session, first, "FINISHED", () -> session.queue.next(true));
+        MusicPlaybackEvents.ended(session, first, "FINISHED", () -> {
+            assertFalse(Thread.holdsLock(session), "Starting the next track must not hold the state monitor during I/O");
+            session.queue.next(true);
+        });
         assertSame(second, session.queue.current());
     }
     @Test void staleFailureFromPreviousPlaybackDoesNotPoisonRetry() {

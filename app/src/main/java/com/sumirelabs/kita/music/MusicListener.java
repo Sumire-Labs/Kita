@@ -27,8 +27,10 @@ public final class MusicListener extends ListenerAdapter {
             if (event.getComponentId().equals("music:preset")) {
                 if (value.equals("page:prev") || value.equals("page:next")) {
                     var session = music.session(guildId);
-                    session.presetPage = Math.clamp(session.presetPage + (value.equals("page:prev") ? -1 : 1),
-                            0, Math.max(0, (music.presets().size() - 1) / PresetSelector.PAGE_SIZE));
+                    synchronized (session) {
+                        session.presetPage = Math.clamp(session.presetPage + (value.equals("page:prev") ? -1 : 1),
+                                0, Math.max(0, (music.presets().size() - 1) / PresetSelector.PAGE_SIZE));
+                    }
                 } else music.preset(guildId, value);
             } else if (event.getComponentId().equals("music:volume")) music.action(guildId, "volume", Long.parseLong(value));
         });
@@ -41,18 +43,21 @@ public final class MusicListener extends ListenerAdapter {
     }
 
     private void update(ComponentInteraction event, Runnable action) {
-        try { requireActive(event); MusicAccess.requireVoice(event.getMember()); }
+        try { MusicAccess.requireVoice(event.getMember()); }
         catch (IllegalArgumentException error) { event.reply(Ui.text("Music", error.getMessage())).setEphemeral(true).queue(); return; }
         event.deferEdit().queue(hook -> {
             if (!worker.submit(() -> {
                 try {
                     var session = music.session(event.getGuild().getIdLong());
-                    synchronized (session) {
+                    session.operate(() -> {
                         requireActive(event);
                         MusicAccess.requireVoice(event.getMember());
                         action.run();
-                        hook.editOriginal(Ui.edit(PlayerPanel.render(music, event.getGuild().getIdLong()))).queue();
-                    }
+                        synchronized (session) {
+                            requireActive(event);
+                            hook.editOriginal(Ui.edit(PlayerPanel.render(music, event.getGuild().getIdLong()))).queue();
+                        }
+                    });
                 } catch (IllegalArgumentException error) { hook.sendMessage(Ui.text("Music", error.getMessage())).setEphemeral(true).queue(); }
                 catch (Exception error) { hook.sendMessage(Ui.text("Music", "音楽ノードとの通信に失敗しました。")).setEphemeral(true).queue(); }
             })) hook.sendMessage(Ui.text("Kita", "現在混み合っています。")).setEphemeral(true).queue();

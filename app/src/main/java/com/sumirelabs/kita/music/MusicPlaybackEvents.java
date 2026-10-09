@@ -25,12 +25,17 @@ final class MusicPlaybackEvents implements AutoCloseable {
         subscription = ordered(events, EmittedEvent::getGuildId, event -> {
             var session = sessions.get(event.getGuildId());
             if (session == null) return;
-            synchronized (session) {
+            session.operate(() -> {
                 switch (event) {
                     case TrackEndEvent end -> ended(session, end.getTrack(), end.getEndReason().name(), () -> {
                         var snapshot = session.queue.snapshot();
-                        try { starter.start(event.getGuildId(), session.queue.next(true), session); }
-                        catch (RuntimeException error) { session.queue.restore(snapshot); throw error; }
+                        Track next;
+                        synchronized (session) { next = session.queue.next(true); }
+                        try { starter.start(event.getGuildId(), next, session); }
+                        catch (RuntimeException error) {
+                            synchronized (session) { session.queue.restore(snapshot); }
+                            throw error;
+                        }
                     });
                     case TrackExceptionEvent failure -> {
                         failed(session, failure.getTrack());
@@ -40,7 +45,7 @@ final class MusicPlaybackEvents implements AutoCloseable {
                     case TrackStuckEvent stuck -> failed(session, stuck.getTrack());
                     default -> { }
                 }
-            }
+            });
         });
     }
 
@@ -56,13 +61,19 @@ final class MusicPlaybackEvents implements AutoCloseable {
     }
 
     static void ended(MusicSession session, Track track, String reason, Runnable advance) {
-        if (!matches(session, track)) return;
-        if (reason.equals("LOAD_FAILED")) failed(session, track);
-        else if (reason.equals("FINISHED") && session.playbackError.isEmpty()) advance.run();
+        boolean next;
+        synchronized (session) {
+            if (!matches(session, track)) return;
+            if (reason.equals("LOAD_FAILED")) failed(session, track);
+            next = reason.equals("FINISHED") && session.playbackError.isEmpty();
+        }
+        if (next) advance.run();
     }
 
     static void failed(MusicSession session, Track track) {
-        if (matches(session, track)) session.playbackError = FAILURE;
+        synchronized (session) {
+            if (matches(session, track)) session.playbackError = FAILURE;
+        }
     }
 
     private static boolean matches(MusicSession session, Track track) {
