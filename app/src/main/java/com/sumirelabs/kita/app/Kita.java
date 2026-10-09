@@ -3,6 +3,7 @@ package com.sumirelabs.kita.app;
 import com.sumirelabs.kita.discord.WorkExecutor;
 import com.sumirelabs.kita.music.MusicService;
 import com.sumirelabs.kita.music.PlayerRefresh;
+import com.sumirelabs.kita.stay.StayService;
 import com.sumirelabs.kita.storage.Database;
 import com.sumirelabs.kita.storage.JdbcSettingsRepository;
 import com.sumirelabs.kita.storage.JdbcTicketRepository;
@@ -28,6 +29,7 @@ public final class Kita implements AutoCloseable {
     private MusicService music;
     private ShardManager shards;
     private PlayerRefresh refresh;
+    private StayService stay;
     private HealthServer health;
     private TicketRecovery ticketRecovery;
     private StatusPresence presence;
@@ -60,8 +62,9 @@ public final class Kita implements AutoCloseable {
                 .setShardsTotal(config.bot().shards() == 0 ? -1 : config.bot().shards())
                 .setActivity(presence.current());
         if (music != null) builder.setVoiceDispatchInterceptor(new JDAVoiceUpdateListener(music.client()));
+        stay = new StayService(id -> shards == null ? null : shards.getGuildById(id), music, worker);
         builder.addEventListeners(FeatureWiring.listeners(config, new JdbcSettingsRepository(database.source()),
-                new JdbcTicketRepository(database.source()), worker, music,
+                new JdbcTicketRepository(database.source()), worker, music, stay,
                 id -> shards == null ? null : shards.getGuildById(id), buildVersion, new JdbcLogShareRepository(database.source())));
         shards = builder.build();
         presence.start(shards);
@@ -87,6 +90,7 @@ public final class Kita implements AutoCloseable {
         if (health != null) health.close();
         if (presence != null) presence.close();
         if (refresh != null) refresh.close();
+        if (stay != null) stay.close();
         if (ticketRecovery != null) ticketRecovery.close();
         worker.close();
         if (music != null) music.close();

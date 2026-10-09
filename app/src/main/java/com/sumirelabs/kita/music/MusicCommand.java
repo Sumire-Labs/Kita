@@ -32,18 +32,22 @@ public final class MusicCommand implements Command {
             var query = context.option("query", "");
             if (query.isBlank()) throw new IllegalArgumentException("URLまたは検索文字列を指定してください。");
             var session = music.session(guildId);
-            synchronized (session) {
+            music.voiceOperation(guildId, () -> { synchronized (session) {
+                MusicAccess.requireVoice(context.member());
                 if (session.voiceChannel != 0 && session.voiceChannel != voice.getIdLong()) {
                     throw new IllegalArgumentException("Kitaと同じボイスチャンネルに参加してください。");
                 }
                 session.voiceChannel = voice.getIdLong();
                 context.jda().getDirectAudioController().connect(voice);
-            }
+            } });
             var added = music.enqueue(guildId, query);
             context.reply(MusicMessages.added(added));
         } else {
-            music.action(guildId, name, 0);
-            if (name.equals("stop")) context.jda().getDirectAudioController().disconnect(context.guild());
+            music.voiceOperation(guildId, () -> {
+                MusicAccess.requireVoice(context.member());
+                music.action(guildId, name, 0);
+                if (name.equals("stop") && !music.staying(guildId)) context.jda().getDirectAudioController().disconnect(context.guild());
+            });
             context.reply("Music", name.equals("stop") ? "再生を停止しました。" : "次の曲へ移動しました。");
         }
     }

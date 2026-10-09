@@ -81,7 +81,7 @@ public final class MusicService implements AutoCloseable {
                 }
                 case "stop" -> {
                     start(guildId, null, session);
-                    synchronized (session) { session.queue.clear(); session.voiceChannel = 0; }
+                    session.stopped();
                 }
                 case "loop-track", "loop-queue" -> {
                     synchronized (session) {
@@ -108,6 +108,29 @@ public final class MusicService implements AutoCloseable {
         sessions.remove(guildId);
         var link = client.getLinkIfCached(guildId);
         if (link != null) link.destroy().subscribe();
+    }
+    public void voiceOperation(long guildId, Runnable action) { session(guildId).operate(action); }
+    public void staying(long guildId, long channelId) {
+        var session = session(guildId);
+        synchronized (session) { session.staying = true; session.voiceChannel = channelId; }
+    }
+    public boolean staying(long guildId) {
+        var session = session(guildId);
+        synchronized (session) { return session.staying; }
+    }
+    public void endStay(long guildId) {
+        var session = session(guildId);
+        synchronized (session) {
+            session.staying = false; session.voiceChannel = 0;
+            session.queue.clear(); session.playbackId = ""; session.playbackError = "";
+        }
+        var link = client.getLinkIfCached(guildId);
+        if (link != null) {
+            try { link.destroy().block(java.time.Duration.ofSeconds(20)); }
+            catch (RuntimeException error) {
+                org.slf4j.LoggerFactory.getLogger(MusicService.class).warn("Could not destroy voice player in guild {}", guildId);
+            }
+        }
     }
     public Map<Long, MusicSession> sessions() { return Map.copyOf(sessions); }
     @Override public void close() { playbackEvents.close(); client.close(); }

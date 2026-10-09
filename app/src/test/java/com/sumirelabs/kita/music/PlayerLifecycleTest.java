@@ -4,6 +4,17 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 class PlayerLifecycleTest {
+    @Test void stopKeepsStayConnectionButReleasesOrdinaryMusicConnection() {
+        var session = new MusicSession();
+        session.voiceChannel = 10;
+        session.staying = true;
+        session.stopped();
+        assertEquals(10, session.voiceChannel);
+        assertTrue(session.staying);
+        session.staying = false;
+        session.stopped();
+        assertEquals(0, session.voiceChannel);
+    }
     @Test void replacementRejectsOldInteractionsAndKeepsNewPanelWhenOldRefreshFails() {
         var session = new MusicSession();
         session.replacePanel(10, 100);

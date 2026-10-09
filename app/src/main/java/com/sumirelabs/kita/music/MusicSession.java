@@ -12,6 +12,7 @@ public final class MusicSession {
     private long panelMessage;
     private long refreshingPanel;
     long voiceChannel;
+    boolean staying;
     String playbackId = "";
     String playbackError = "";
 
@@ -21,6 +22,7 @@ public final class MusicSession {
         try { action.run(); }
         finally { operations.unlock(); }
     }
+    synchronized void stopped() { queue.clear(); if (!staying) voiceChannel = 0; }
     synchronized Panel replacePanel(long channelId, long messageId) {
         var previous = new Panel(panelChannel, panelMessage);
         panelChannel = channelId; panelMessage = messageId;

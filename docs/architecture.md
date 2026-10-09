@@ -25,6 +25,7 @@ Ticket・設定の契約はBot専用なので、`app`の各機能パッケージ
 | previews | サービス別の取得と共通の表示 |
 | tickets | チケット契約、受付、非公開チャンネル、担当者、履歴 |
 | music | Lavalink接続、キュー、公開曲情報取得、プレイヤー |
+| stay | VC常駐、退出タイマー、常駐用Components V2パネル |
 | logshare | ログ判定、mclogs-java、共有権限、添付・本文のサイレント共有 |
 
 新しい機能は`app`で`Command`やJDAリスナーを登録します。
