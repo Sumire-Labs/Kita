@@ -1,6 +1,6 @@
 # Kita
 
-Java 25 / JDA / MariaDB / Lavalinkで構成する、複数の物事に柔軟に対応可能な多機能BOT
+Java 25 / Discord4J / MariaDB (R2DBC) / Lavalinkで構成する、複数の物事に柔軟に対応可能な多機能BOT
 
 ## 起動
 

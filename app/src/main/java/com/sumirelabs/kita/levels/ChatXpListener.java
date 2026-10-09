@@ -1,39 +1,40 @@
 package com.sumirelabs.kita.levels;
 
-import com.sumirelabs.kita.discord.WorkExecutor;
+import com.sumirelabs.kita.discord.Access;
+import discord4j.core.event.domain.message.MessageCreateEvent;
+import discord4j.core.object.entity.channel.ThreadChannel;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.stream.Collectors;
-import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
-import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import reactor.core.publisher.Mono;
 
-public final class ChatXpListener extends ListenerAdapter {
+public final class ChatXpListener {
     private final LevelsService levels;
-    private final WorkExecutor worker;
     private final ChatXpGate gate = new ChatXpGate();
-    public ChatXpListener(LevelsService levels, WorkExecutor worker) { this.levels = levels; this.worker = worker; }
-    @Override public void onMessageReceived(MessageReceivedEvent event) {
-        if (!event.isFromGuild() || event.getAuthor().isBot() || event.isWebhookMessage()) return;
-        String text = event.getMessage().getContentRaw().strip();
-        if (text.isBlank() || text.startsWith("k!") || text.startsWith("/")) return;
-        worker.submit(() -> {
-            var config = LevelConfig.from(levels.settings(event.getGuild().getIdLong()));
-            if (!config.enabled() || !config.chat()) return;
-            var now = event.getMessage().getTimeCreated().toInstant();
-            if (gate.blocked(event.getGuild().getIdLong(), event.getAuthor().getIdLong(), now, null)) return;
-            long parent = event.getChannel() instanceof ThreadChannel thread ? thread.getParentChannel().getIdLong() : 0;
-            if (!config.channel(event.getChannel().getIdLong(), parent)) return;
-            var member = event.getMember() == null ? event.getGuild().retrieveMemberById(event.getAuthor().getIdLong()).complete() : event.getMember();
-            if (!config.member(member.getRoles().stream().map(role -> role.getId()).collect(Collectors.toSet()))) return;
-            try {
-                byte[] hash = MessageDigest.getInstance("SHA-256").digest(text.replaceAll("\\s+", " ").toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8));
-                if (gate.blocked(event.getGuild().getIdLong(), event.getAuthor().getIdLong(), now, hash)) return;
-                var result = levels.award(event.getGuild(), event.getAuthor().getIdLong(), LevelsRepository.Source.CHAT, config.chatXp(),
-                        now, hash, 0, event.getChannel().getIdLong());
-                if (result.accepted()) gate.accepted(event.getGuild().getIdLong(), event.getAuthor().getIdLong(), now, config.cooldown(), hash);
-            } catch (java.security.NoSuchAlgorithmException error) { throw new IllegalStateException(error); }
-        });
+    public ChatXpListener(LevelsService levels) { this.levels = levels; }
+    public Mono<Void> message(MessageCreateEvent event) {
+        var message = event.getMessage();
+        if (message.getGuildId().isEmpty() || message.getAuthor().map(user -> user.isBot()).orElse(true) || message.getWebhookId().isPresent()) return Mono.empty();
+        String text = message.getContent().strip();
+        if (text.isBlank() || text.startsWith("k!") || text.startsWith("/")) return Mono.empty();
+        long guild = message.getGuildId().orElseThrow().asLong(), user = message.getAuthor().orElseThrow().getId().asLong();
+        var now = message.getTimestamp();
+        if (gate.blocked(guild, user, now, null)) return Mono.empty();
+        return levels.settings(guild).map(LevelConfig::from).filter(config -> config.enabled() && config.chat())
+                .flatMap(config -> message.getChannel().filter(channel -> config.channel(channel.getId().asLong(),
+                                channel instanceof ThreadChannel thread ? thread.getParentId().map(id -> id.asLong()).orElse(0L) : 0))
+                        .flatMap(channel -> event.getMember().map(Mono::just).orElseGet(() -> Access.member(event.getClient(), guild, user)))
+                        .filter(member -> config.member(member.getRoleIds().stream().map(id -> id.asString()).collect(Collectors.toSet())))
+                        .flatMap(member -> {
+                            byte[] hash;
+                            try { hash = MessageDigest.getInstance("SHA-256").digest(text.replaceAll("\\s+", " ").toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8)); }
+                            catch (java.security.NoSuchAlgorithmException error) { return Mono.error(error); }
+                            if (gate.blocked(guild, user, now, hash)) return Mono.empty();
+                            return member.getGuild().flatMap(server -> levels.award(server, user, LevelsRepository.Source.CHAT, config.chatXp(), now, hash, 0,
+                                    message.getChannelId().asLong())).doOnNext(result -> {
+                                if (result.accepted()) gate.accepted(guild, user, now, config.cooldown(), hash);
+                            });
+                        })).then();
     }
 }

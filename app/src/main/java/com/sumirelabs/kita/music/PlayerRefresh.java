@@ -1,50 +1,33 @@
 package com.sumirelabs.kita.music;
 
+import com.sumirelabs.kita.discord.Access;
 import com.sumirelabs.kita.discord.Ui;
-import com.sumirelabs.kita.discord.WorkExecutor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.function.LongFunction;
-import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
-import net.dv8tion.jda.api.exceptions.ErrorResponseException;
-import net.dv8tion.jda.api.requests.ErrorResponse;
-import org.slf4j.LoggerFactory;
+import discord4j.core.GatewayDiscordClient;
+import discord4j.rest.http.client.ClientException;
+import java.time.Duration;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public final class PlayerRefresh implements AutoCloseable {
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    public PlayerRefresh(MusicService music, LongFunction<Guild> guilds, WorkExecutor worker) {
-        scheduler.scheduleWithFixedDelay(() -> {
-            for (var entry : music.sessions().entrySet()) {
-                var session = entry.getValue();
-                if (!worker.submit(() -> {
-                    var panel = session.beginPanelRefresh();
-                    if (panel == null) return;
-                    try {
-                        var guild = guilds.apply(entry.getKey());
-                        var channel = guild == null ? null : guild.getChannelById(GuildMessageChannel.class, panel.channelId());
-                        if (channel == null) { session.finishPanelRefresh(panel.messageId(), true); return; }
-                        synchronized (session) {
-                            if (!session.isCurrentPanel(panel.messageId())) {
-                                session.finishPanelRefresh(panel.messageId(), false); return;
-                            }
-                            channel.editMessageById(panel.messageId(), Ui.edit(PlayerPanel.render(music, entry.getKey())))
-                                    .queue(ignored -> session.finishPanelRefresh(panel.messageId(), false), error -> {
-                                        boolean deleted = error instanceof ErrorResponseException response
-                                                && response.getErrorResponse() == ErrorResponse.UNKNOWN_MESSAGE;
-                                        session.finishPanelRefresh(panel.messageId(), deleted);
-                                        if (!deleted) LoggerFactory.getLogger(PlayerRefresh.class)
-                                                .warn("Could not refresh player in guild {}", entry.getKey());
-                                    });
+    private final Disposable timer;
+    public PlayerRefresh(MusicService music, GatewayDiscordClient client) {
+        timer = Flux.interval(Duration.ofSeconds(15)).onBackpressureDrop()
+                .concatMap(tick -> Flux.fromIterable(music.sessions().entrySet()).flatMap(entry -> {
+                    var session = entry.getValue();
+                    return music.voiceOperation(entry.getKey(), () -> Mono.defer(() -> {
+                        var panel = session.beginPanelRefresh();
+                        if (panel == null) return Mono.empty();
+                        if (!session.isCurrentPanel(panel.messageId())) {
+                            session.finishPanelRefresh(panel.messageId(), false); return Mono.empty();
                         }
-                    } catch (RuntimeException error) {
-                        session.finishPanelRefresh(panel.messageId(), false);
-                        LoggerFactory.getLogger(PlayerRefresh.class).warn("Player refresh failed in guild {}", entry.getKey());
-                    }
-                })) LoggerFactory.getLogger(PlayerRefresh.class).debug("Player refresh skipped: worker busy");
-            }
-        }, 15, 15, TimeUnit.SECONDS);
+                        return client.getMessageById(Access.id(panel.channelId()), Access.id(panel.messageId()))
+                                .flatMap(message -> message.edit(Ui.edit(PlayerPanel.render(music, entry.getKey())))).then()
+                                .doOnError(error -> session.finishPanelRefresh(panel.messageId(),
+                                        error instanceof ClientException response && response.getStatus().code() == 404))
+                                .doFinally(signal -> session.finishPanelRefresh(panel.messageId(), false));
+                    })).onErrorResume(error -> Mono.empty());
+                }, 16)).subscribe();
     }
-    @Override public void close() { scheduler.shutdownNow(); }
+    @Override public void close() { timer.dispose(); }
 }

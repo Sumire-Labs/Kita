@@ -1,68 +1,42 @@
 package com.sumirelabs.kita.music;
 
+import com.sumirelabs.kita.discord.InteractionContext;
 import com.sumirelabs.kita.discord.Ui;
-import com.sumirelabs.kita.discord.WorkExecutor;
-import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
-import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
-import net.dv8tion.jda.api.events.guild.GuildLeaveEvent;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.components.ComponentInteraction;
+import discord4j.core.event.domain.interaction.ComponentInteractionEvent;
+import discord4j.core.event.domain.interaction.SelectMenuInteractionEvent;
+import reactor.core.publisher.Mono;
 
-public final class MusicListener extends ListenerAdapter {
+public final class MusicListener {
     private final MusicService music;
-    private final WorkExecutor worker;
-    public MusicListener(MusicService music, WorkExecutor worker) { this.music = music; this.worker = worker; }
+    public MusicListener(MusicService music) { this.music = music; }
 
-    @Override public void onButtonInteraction(ButtonInteractionEvent event) {
-        if (!event.getComponentId().startsWith("music:") || !event.isFromGuild()) return;
-        String action = event.getComponentId().substring(6);
-        update(event, () -> music.action(event.getGuild().getIdLong(), action, 0));
-    }
-
-    @Override public void onStringSelectInteraction(StringSelectInteractionEvent event) {
-        if (!event.getComponentId().startsWith("music:") || !event.isFromGuild()) return;
-        update(event, () -> {
-            var value = event.getValues().getFirst();
-            long guildId = event.getGuild().getIdLong();
-            if (event.getComponentId().equals("music:preset")) {
-                if (value.equals("page:prev") || value.equals("page:next")) {
-                    var session = music.session(guildId);
-                    synchronized (session) {
-                        session.presetPage = Math.clamp(session.presetPage + (value.equals("page:prev") ? -1 : 1),
-                                0, Math.max(0, (music.presets().size() - 1) / PresetSelector.PAGE_SIZE));
+    public Mono<Void> component(ComponentInteractionEvent event) {
+        if (!event.getCustomId().startsWith("music:") || event.getInteraction().getGuildId().isEmpty()) return Mono.empty();
+        var context = new InteractionContext(event);
+        return context.deferEdit().then(music.voiceOperation(context.guildId(), () -> context.member()
+                .flatMap(MusicAccess::requireVoice).flatMap(voice -> {
+                    var session = music.session(context.guildId());
+                    if (!session.isCurrentPanel(event.getMessageId().asLong())) {
+                        return Mono.error(new IllegalArgumentException("このプレイヤーは破棄済みです。新しい /player を使用してください。"));
                     }
-                } else music.preset(guildId, value);
-            } else if (event.getComponentId().equals("music:volume")) music.action(guildId, "volume", Long.parseLong(value));
-        });
+                    Mono<Void> action;
+                    if (event instanceof SelectMenuInteractionEvent select) {
+                        var value = select.getValues().getFirst();
+                        if (event.getCustomId().equals("music:preset")) {
+                            if (value.equals("page:prev") || value.equals("page:next")) {
+                                synchronized (session) {
+                                    session.presetPage = Math.clamp(session.presetPage + (value.equals("page:prev") ? -1 : 1),
+                                            0, Math.max(0, (music.presets().size() - 1) / PresetSelector.PAGE_SIZE));
+                                }
+                                action = Mono.empty();
+                            } else action = music.presetNow(context.guildId(), value);
+                        } else if (event.getCustomId().equals("music:volume")) {
+                            action = music.actionNow(context.guildId(), "volume", Long.parseLong(value));
+                        } else return Mono.empty();
+                    } else action = music.actionNow(context.guildId(), event.getCustomId().substring(6), 0);
+                    return action.then(Mono.defer(() -> session.isCurrentPanel(event.getMessageId().asLong())
+                            ? context.edit(PlayerPanel.render(music, context.guildId())) : Mono.empty()));
+                }))).onErrorResume(error -> context.followup(Ui.text("Music",
+                        error instanceof IllegalArgumentException ? error.getMessage() : "音楽ノードとの通信に失敗しました。"), true));
     }
-
-    private void requireActive(ComponentInteraction event) {
-        if (!music.session(event.getGuild().getIdLong()).isCurrentPanel(event.getMessageIdLong())) {
-            throw new IllegalArgumentException("このプレイヤーは破棄済みです。新しい /player を使用してください。");
-        }
-    }
-
-    private void update(ComponentInteraction event, Runnable action) {
-        try { MusicAccess.requireVoice(event.getMember()); }
-        catch (IllegalArgumentException error) { event.reply(Ui.text("Music", error.getMessage())).setEphemeral(true).queue(); return; }
-        event.deferEdit().queue(hook -> {
-            if (!worker.submit(() -> {
-                try {
-                    var session = music.session(event.getGuild().getIdLong());
-                    session.operate(() -> {
-                        requireActive(event);
-                        MusicAccess.requireVoice(event.getMember());
-                        action.run();
-                        synchronized (session) {
-                            requireActive(event);
-                            hook.editOriginal(Ui.edit(PlayerPanel.render(music, event.getGuild().getIdLong()))).queue();
-                        }
-                    });
-                } catch (IllegalArgumentException error) { hook.sendMessage(Ui.text("Music", error.getMessage())).setEphemeral(true).queue(); }
-                catch (Exception error) { hook.sendMessage(Ui.text("Music", "音楽ノードとの通信に失敗しました。")).setEphemeral(true).queue(); }
-            })) hook.sendMessage(Ui.text("Kita", "現在混み合っています。")).setEphemeral(true).queue();
-        });
-    }
-
-    @Override public void onGuildLeave(GuildLeaveEvent event) { music.forget(event.getGuild().getIdLong()); }
 }

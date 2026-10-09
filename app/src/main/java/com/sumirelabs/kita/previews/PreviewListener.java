@@ -1,53 +1,47 @@
 package com.sumirelabs.kita.previews;
 
-import com.sumirelabs.kita.settings.SettingsRepository;
+import com.sumirelabs.kita.discord.Access;
+import com.sumirelabs.kita.discord.Replies;
 import com.sumirelabs.kita.discord.Ui;
-import com.sumirelabs.kita.discord.WorkExecutor;
+import com.sumirelabs.kita.settings.SettingsRepository;
+import discord4j.core.event.domain.message.MessageCreateEvent;
+import discord4j.core.object.entity.Message;
+import discord4j.core.object.entity.channel.GuildChannel;
+import discord4j.core.object.entity.channel.TextChannel;
+import discord4j.core.spec.MessageEditSpec;
+import discord4j.rest.util.Permission;
+import java.util.List;
 import java.util.Map;
-import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
-import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
-public final class PreviewListener extends ListenerAdapter {
+public final class PreviewListener {
     private final SettingsRepository settings;
-    private final WorkExecutor worker;
     private final PreviewReplacement replacement;
-
-    public PreviewListener(SettingsRepository settings, WorkExecutor worker, Map<String, PreviewProvider> providers) {
-        this.settings = settings; this.worker = worker; this.replacement = new PreviewReplacement(providers);
+    public PreviewListener(SettingsRepository settings, Map<String, PreviewProvider> providers) {
+        this.settings = settings; replacement = new PreviewReplacement(providers);
     }
-
-    @Override public void onMessageReceived(MessageReceivedEvent event) {
-        if (!event.isFromGuild() || event.getAuthor().isBot() || event.isWebhookMessage()) return;
-        var links = SocialLink.find(event.getMessage().getContentRaw());
-        if (links.isEmpty()) return;
-        worker.submit(() -> {
-            var config = settings.get(event.getGuild().getIdLong());
-            if (!config.enabled("previews.enabled")) return;
+    public Mono<Void> message(MessageCreateEvent event) {
+        var message = event.getMessage();
+        if (message.getGuildId().isEmpty() || message.getAuthor().map(user -> user.isBot()).orElse(true) || message.getWebhookId().isPresent()) return Mono.empty();
+        var links = SocialLink.find(message.getContent());
+        if (links.isEmpty()) return Mono.empty();
+        return settings.get(message.getGuildId().orElseThrow().asLong()).flatMap(config -> {
+            if (!config.enabled("previews.enabled")) return Mono.empty();
             var active = links.stream().filter(link -> config.enabled("previews." + link.platform())).toList();
-            boolean maySuppress = active.size() == links.size()
-                    && SocialLink.urlCount(event.getMessage().getContentRaw()) == links.size()
-                    && event.getGuild().getSelfMember().hasPermission(event.getGuildChannel(), Permission.MESSAGE_MANAGE);
-            boolean nsfw = event.getChannel() instanceof TextChannel text && text.isNSFW();
-            replacement.replace(active, maySuppress,
-                    preview -> event.getMessage().reply(PreviewRenderer.render(preview, nsfw)).mentionRepliedUser(false).complete(),
+            boolean maySuppress = !active.isEmpty() && active.size() == links.size() && SocialLink.urlCount(message.getContent()) == links.size();
+            return message.getChannel().flatMap(channel -> replacement.replace(active, maySuppress,
+                    preview -> Replies.reference(message, PreviewRenderer.render(preview, channel instanceof TextChannel text && text.isNsfw())).then(),
                     (link, error) -> {
-                        LoggerFactory.getLogger(PreviewListener.class).warn("{} preview failed in channel {} message {}: {}",
-                                link.platform(), event.getChannel().getId(), event.getMessageId(), diagnostic(error));
-                        event.getMessage().reply(Ui.text("プレビューを取得できませんでした",
-                                link.platform() + " の投稿を取得できませんでした。元のリンクから開いてください。"))
-                                .mentionRepliedUser(false).queue(ignored -> {}, sendError ->
-                                        LoggerFactory.getLogger(PreviewListener.class).warn("Preview failure notice could not be sent: {}", diagnostic(sendError)));
-                    }, () -> event.getMessage().suppressEmbeds(true).queue(ignored -> {}, error ->
-                            LoggerFactory.getLogger(PreviewListener.class).warn("Source preview suppression failed: {}", diagnostic(error))));
-        });
-    }
-
-    private static String diagnostic(Throwable error) {
-        String detail = error instanceof IllegalStateException ? String.valueOf(error.getMessage()) : error.getClass().getSimpleName();
-        detail = detail.replaceAll("https?://\\S+", "[URL]").replaceAll("[\\r\\n]+", " ");
-        return detail.substring(0, Math.min(500, detail.length()));
+                        LoggerFactory.getLogger(getClass()).warn("{} preview failed: {}", link.platform(), error.getClass().getSimpleName());
+                        return Replies.reference(message, Ui.text("プレビューを取得できませんでした",
+                                link.platform() + " の投稿を取得できませんでした。元のリンクから開いてください。")).then();
+                    }, () -> {
+                        if (!(channel instanceof GuildChannel guildChannel)) return Mono.empty();
+                        return message.getGuild().flatMap(guild -> guild.getSelfMember())
+                                .flatMap(member -> Access.channel(member, guildChannel, Permission.MANAGE_MESSAGES))
+                                .then(message.edit(MessageEditSpec.builder().flags(List.of(Message.Flag.SUPPRESS_EMBEDS)).build())).then();
+                    }));
+        }).then();
     }
 }

@@ -1,120 +1,75 @@
 package com.sumirelabs.kita.settings;
 
-import com.sumirelabs.kita.settings.SettingsRepository;
-import com.sumirelabs.kita.discord.Ui;
-import com.sumirelabs.kita.discord.WorkExecutor;
+import com.sumirelabs.kita.discord.*;
+import discord4j.core.event.domain.interaction.ButtonInteractionEvent;
+import discord4j.core.event.domain.interaction.SelectMenuInteractionEvent;
+import discord4j.core.event.domain.interaction.ModalSubmitInteractionEvent;
+import discord4j.core.event.domain.interaction.ComponentInteractionEvent;
+import discord4j.rest.util.Permission;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.LongConsumer;
-import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.components.label.Label;
-import net.dv8tion.jda.api.components.textinput.TextInput;
-import net.dv8tion.jda.api.components.textinput.TextInputStyle;
-import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
-import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent;
-import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
-import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
-import net.dv8tion.jda.api.interactions.components.ComponentInteraction;
-import net.dv8tion.jda.api.modals.Modal;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import java.util.Set;
+import java.util.function.Function;
+import reactor.core.publisher.Mono;
 
-public final class SettingsListener extends ListenerAdapter {
+public final class SettingsListener {
     private final SettingsRepository repository;
-    private final WorkExecutor worker;
-    private final LongConsumer publish;
-    public SettingsListener(SettingsRepository repository, WorkExecutor worker, LongConsumer publish) {
-        this.repository = repository; this.worker = worker; this.publish = publish;
-    }
-
-    private boolean authorized(ComponentInteraction event) {
-        if (!event.getComponentId().startsWith("settings:")) return false;
-        var parts = event.getComponentId().split(":", 3);
-        if (!event.isFromGuild() || !parts[1].equals(event.getUser().getId())
-                || event.getMember() == null || !event.getMember().hasPermission(Permission.MANAGE_SERVER)) {
-            event.reply(Ui.text("Settings", "このパネルを操作する権限がありません。")).setEphemeral(true).queue();
-            return false;
+    private final Function<Long, Mono<Void>> publish;
+    public SettingsListener(SettingsRepository repository, Function<Long, Mono<Void>> publish) { this.repository = repository; this.publish = publish; }
+    public Mono<Void> select(SelectMenuInteractionEvent event) {
+        if (!event.getCustomId().startsWith("settings:")) return Mono.empty();
+        String action = event.getCustomId().split(":", 3)[2]; var values = event.getValues();
+        if (action.equals("logshare.channels")) return Replies.privateReply(event, Ui.text("Settings", "チャンネル設定は除外方式です。/settings を開き直してください。"));
+        if (Set.of("category", "role", "panel", "logshare.excludedChannels", "logshare.roles").contains(action)) {
+            String key = action.startsWith("logshare.") ? action : "ticket." + action;
+            return update(event, action.startsWith("logshare.") ? "logshare" : "ticket", Map.of(key, String.join(",", values)));
         }
-        return true;
-    }
-
-    @Override public void onStringSelectInteraction(StringSelectInteractionEvent event) {
-        if (!authorized(event)) return;
-        String action = event.getComponentId().split(":", 3)[2];
-        String page = action.startsWith("previews") || action.equals("platforms") ? "previews" : "translation";
-        var changes = new HashMap<String, String>();
-        if (action.equals("page")) page = event.getValues().getFirst();
+        var changes = new HashMap<String, String>(); String page;
+        if (action.equals("page")) page = values.getFirst();
         else if (action.equals("platforms")) {
-            for (var platform : SettingsPanel.PLATFORMS) changes.put("previews." + platform,
-                    String.valueOf(event.getValues().contains(platform)));
-        } else if (java.util.Set.of("previews.enabled", "translation.enabled", "ticket.enabled", "logshare.enabled", "logshare.auto").contains(action)) {
-            changes.put(action, event.getValues().getFirst());
-            if (action.startsWith("ticket")) page = "ticket";
-            if (action.startsWith("logshare")) page = "logshare";
-        } else return;
-        update(event, page, changes);
+            page = "previews";
+            for (String platform : SettingsPanel.PLATFORMS) changes.put("previews." + platform, String.valueOf(values.contains(platform)));
+        } else if (Set.of("previews.enabled", "translation.enabled", "ticket.enabled", "logshare.enabled", "logshare.auto").contains(action)) {
+            if (!Set.of("true", "false").contains(values.getFirst())) return Mono.empty();
+            changes.put(action, values.getFirst()); page = action.startsWith("previews") ? "previews" : action.startsWith("ticket") ? "ticket"
+                    : action.startsWith("logshare") ? "logshare" : "translation";
+        } else return Mono.empty();
+        return update(event, page, changes);
     }
-
-    @Override public void onEntitySelectInteraction(EntitySelectInteractionEvent event) {
-        if (!authorized(event)) return;
-        String action = event.getComponentId().split(":", 3)[2];
-        if (action.equals("logshare.channels")) {
-            event.reply(Ui.text("Settings", "チャンネル設定は除外方式へ変更されました。/settings を開き直してください。"))
-                    .setEphemeral(true).queue(); return;
-        }
-        if (java.util.Set.of("logshare.excludedChannels", "logshare.roles").contains(action)) {
-            update(event, "logshare", Map.of(action, event.getValues().stream().map(value -> value.getId())
-                    .collect(java.util.stream.Collectors.joining(","))));
-            return;
-        }
-        if (!java.util.Set.of("category", "role", "panel").contains(action)) return;
-        update(event, "ticket", Map.of("ticket." + action, event.getValues().getFirst().getId()));
+    public Mono<Void> button(ButtonInteractionEvent event) {
+        if (!event.getCustomId().startsWith("settings:")) return Mono.empty();
+        var context = new InteractionContext(event);
+        if (!owner(event, context)) return context.privateReply(Ui.text("Settings", "このパネルを操作する権限がありません。"));
+        String action = event.getCustomId().split(":", 3)[2];
+        if (action.equals("template")) return context.member().flatMap(member -> Access.require(member, Permission.MANAGE_GUILD))
+                .then(event.presentModal(Forms.modal("settings-template:" + context.userId(), "チケット設定",
+                        Forms.paragraph("welcome", "受付案内文", 1500), Forms.input("question", "問い合わせ欄のラベル", 45))))
+                .onErrorResume(error -> context.privateReply(Ui.text("Settings", "サーバー管理権限が必要です。")));
+        if (action.equals("publish")) return context.defer(true).then(context.member().flatMap(member -> Access.require(member, Permission.MANAGE_GUILD)))
+                .then(Mono.defer(() -> publish.apply(context.guildId()))).then(context.followup(Ui.text("Ticket", "受付パネルを配置しました。"), true))
+                .onErrorResume(error -> context.followup(Ui.text("Ticket", "設定とBotの権限を確認してください。"), true));
+        return Mono.empty();
     }
-
-    @Override public void onButtonInteraction(ButtonInteractionEvent event) {
-        if (!authorized(event)) return;
-        var action = event.getComponentId().split(":", 3)[2];
-        if (action.equals("template")) {
-            event.replyModal(Modal.create("settings-template:" + event.getUser().getId(), "チケット設定")
-                    .addComponents(Label.of("受付案内文", TextInput.create("welcome", TextInputStyle.PARAGRAPH)
-                            .setMaxLength(1500).build()),
-                            Label.of("問い合わせ欄のラベル", TextInput.create("question", TextInputStyle.SHORT)
-                                    .setMaxLength(45).build())).build()).queue();
-        } else if (action.equals("publish")) {
-            event.deferReply(true).queue(hook -> {
-                if (!worker.submit(() -> {
-                    try { publish.accept(event.getGuild().getIdLong()); hook.sendMessage(Ui.text("Ticket", "受付パネルを配置しました。")).queue(); }
-                    catch (Exception error) { hook.sendMessage(Ui.text("Ticket", "設定とBotの権限を確認してください。")).queue(); }
-                })) hook.sendMessage(Ui.text("Kita", "現在混み合っています。")).queue();
-            });
+    public Mono<Void> modal(ModalSubmitInteractionEvent event) {
+        if (!event.getCustomId().startsWith("settings-template:")) return Mono.empty();
+        var context = new InteractionContext(event);
+        if (event.getInteraction().getGuildId().isEmpty() || !context.owner(event.getCustomId().split(":")[1])) {
+            return context.privateReply(Ui.text("Settings", "この設定を操作する権限がありません。"));
         }
+        return context.defer(true).then(context.member().flatMap(member -> Access.require(member, Permission.MANAGE_GUILD)))
+                .then(Mono.defer(() -> repository.update(context.guildId(), Map.of("ticket.welcome", context.value("welcome"), "ticket.question", context.value("question")))))
+                .then(context.followup(Ui.text("Settings", "保存しました。受付パネルを再配置すると反映されます。"), true))
+                .onErrorResume(error -> context.followup(Ui.text("Settings", "保存に失敗しました。権限を確認してください。"), true));
     }
-
-    @Override public void onModalInteraction(ModalInteractionEvent event) {
-        if (!event.getModalId().equals("settings-template:" + event.getUser().getId())) return;
-        if (event.getMember() == null || !event.getMember().hasPermission(Permission.MANAGE_SERVER)) {
-            event.reply(Ui.text("Settings", "サーバー管理権限が必要です。")).setEphemeral(true).queue(); return;
-        }
-        event.deferReply(true).queue(hook -> {
-            if (!worker.submit(() -> {
-                repository.update(event.getGuild().getIdLong(), Map.of("ticket.welcome", event.getValue("welcome").getAsString(),
-                        "ticket.question", event.getValue("question").getAsString()));
-                hook.sendMessage(Ui.text("Settings", "保存しました。受付パネルを再配置すると案内文が反映されます。")).queue();
-            })) hook.sendMessage(Ui.text("Kita", "現在混み合っています。")).queue();
-        });
+    private Mono<Void> update(ComponentInteractionEvent event, String page, Map<String, String> changes) {
+        var context = new InteractionContext(event);
+        if (!owner(event, context)) return context.privateReply(Ui.text("Settings", "このパネルを操作する権限がありません。"));
+        return context.deferEdit().then(context.member().flatMap(member -> Access.require(member, Permission.MANAGE_GUILD)))
+                .then(Mono.defer(() -> changes.isEmpty() ? repository.get(context.guildId()) : repository.update(context.guildId(), changes)))
+                .flatMap(settings -> context.edit(SettingsPanel.render(settings, context.userId(), page)))
+                .onErrorResume(error -> context.followup(Ui.text("Settings", "保存できませんでした。権限と設定を確認してください。"), true));
     }
-
-    private void update(ComponentInteraction event, String page, Map<String, String> changes) {
-        event.deferEdit().queue(hook -> {
-            if (!worker.submit(() -> {
-                try {
-                    if (event.getMember() == null || !event.getMember().hasPermission(Permission.MANAGE_SERVER)) {
-                        hook.sendMessage(Ui.text("Settings", "サーバー管理権限が必要です。")).setEphemeral(true).queue(); return;
-                    }
-                    var settings = changes.isEmpty() ? repository.get(event.getGuild().getIdLong())
-                            : repository.update(event.getGuild().getIdLong(), changes);
-                    hook.editOriginal(Ui.edit(SettingsPanel.render(settings, event.getUser().getIdLong(), page))).queue();
-                } catch (Exception error) { hook.sendMessage(Ui.text("Settings", "保存に失敗しました。")).setEphemeral(true).queue(); }
-            })) hook.sendMessage(Ui.text("Kita", "現在混み合っています。")).setEphemeral(true).queue();
-        });
+    private static boolean owner(ComponentInteractionEvent event, InteractionContext context) {
+        return event.getInteraction().getGuildId().isPresent() && context.owner(event.getCustomId().split(":", 3)[1]);
     }
 }

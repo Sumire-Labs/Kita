@@ -17,8 +17,8 @@ Ticket・設定の契約はBot専用なので、`app`の各機能パッケージ
 | Package | Responsibility |
 | --- | --- |
 | app | 設定ファイル、起動・終了、依存関係の組み立て |
-| discord | JDA境界、コマンド受付、Components V2 UI、処理実行器 |
-| storage | MariaDB、HikariCP、Flyway、リポジトリ実装 |
+| discord | Discord4J境界、コマンド受付、Components V2 UI、非同期処理境界 |
+| storage | MariaDB、R2DBCプール、Flyway、リポジトリ実装 |
 | basic | Ping、Avatar、FastFetch |
 | settings | サーバー設定の契約と権限を検証する設定パネル |
 | translation | 国旗と言語の対応、DeepL SDK、重複抑制 |
@@ -29,14 +29,17 @@ Ticket・設定の契約はBot専用なので、`app`の各機能パッケージ
 | logshare | ログ判定、mclogs-java、共有権限、添付・本文のサイレント共有 |
 | levels | Chat/VC XP、順位、報酬ロール、Skijaのプロフィール画像、設定パネル |
 
-新しい機能は`app`で`Command`やJDAリスナーを登録します。
+新しい機能は`app`で`Command`やDiscord4Jイベント処理を登録します。
 外部データ取得・状態管理・表示を分離する方針は、パッケージ単位で維持します。
 
 ## Concurrency and persistence
 
-外部通信とDB処理はGatewayイベントスレッドから分離し、最大64処理の仮想スレッド実行器を使用します。
-混雑時はコマンドに再試行を案内し、自動処理はスキップします。
-HikariCPのDB接続は最大12本。設定更新は行ロックとトランザクションで同時変更を保護します。
+Discord4JとReactorでイベント・Discord REST・Lavalink・R2DBCを非同期に接続します。
+JDBCは起動時のFlywayマイグレーションに限定し、MariaDBの通常アクセスは最大12接続のR2DBCプールを使用します。
+設定更新とXP加算は行ロックとトランザクションで保護し、失敗・キャンセル時にもロールバックして接続を返します。
+同期SDK・外部プロセス・ファイル操作は最大16スレッド、画像生成は最大2スレッドの専用スケジューラーへ隔離します。
+音楽・VC操作はサーバー別の非同期キューで直列化します。ネットワーク待機中にスレッドや状態モニターを保持しません。
+Lavalink音声連携はDiscordの音声セッションID・チャンネルID・サーバー情報を組み合わせ、接続情報の反映後に再生します。
 サーバー設定の全キーを文字列として保存するため、機能の追加時に設定用カラムを増やす必要はありません。
 
 チケットにはサーバー・所有者ごとの有効チケット一意制約があります。

@@ -2,27 +2,26 @@ package com.sumirelabs.kita.music;
 
 import dev.arbjerg.lavalink.protocol.v4.TrackInfo;
 import java.net.URI;
-import net.dv8tion.jda.api.components.container.ContainerChildComponent;
-import net.dv8tion.jda.api.components.section.Section;
-import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
-import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
-import net.dv8tion.jda.api.utils.MarkdownSanitizer;
+import discord4j.core.object.component.Container;
+import discord4j.core.object.component.Section;
+import discord4j.core.object.component.TextDisplay;
+import discord4j.core.object.component.Thumbnail;
+import com.sumirelabs.kita.discord.Ui;
 
 final class MusicTrackDisplay {
     private MusicTrackDisplay() {}
 
     static String title(String title, String sourceUrl) {
         String text = title.replaceAll("[\\r\\n]+", " ");
-        text = MarkdownSanitizer.escape(text.substring(0, Math.min(text.length(), 250)));
-        text = text.replace("[", "\\[").replace("]", "\\]");
+        text = Ui.escape(text.substring(0, Math.min(text.length(), 250)));
         String url = httpUrl(sourceUrl);
         return url == null ? text : "[" + text + "](<" + url + ">)";
     }
 
-    static ContainerChildComponent heading(String text, String artworkUrl) {
+    static Container heading(String text, String artworkUrl) {
         var content = TextDisplay.of(text);
         String url = httpUrl(artworkUrl);
-        return url == null ? content : Section.of(Thumbnail.fromUrl(url).withDescription("曲のサムネイル"), content);
+        return url == null ? Container.of(content) : Container.of(Section.of(Thumbnail.of(discord4j.core.object.component.UnfurledMediaItem.of(url), "曲のサムネイル"), content));
     }
 
     static String artwork(TrackInfo track) {

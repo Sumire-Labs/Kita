@@ -18,7 +18,7 @@ class InstagramProviderTest {
         assertEquals("creator", preview.author());
         assertEquals("Photo caption", preview.text());
         assertEquals(java.util.List.of("https://scontent.cdninstagram.com/photo.jpg?a=1&b=2"), preview.media());
-        assertTrue(PreviewRenderer.render(preview, false).isUsingComponentsV2());
+        assertTrue(PreviewRenderer.render(preview, false).flags().get().contains(discord4j.core.object.entity.Message.Flag.IS_COMPONENTS_V2));
     }
     @Test void loginPageIsNotMistakenForPostContent() {
         var page = Jsoup.parse("<title>Instagram login</title><img src='https://scontent.cdninstagram.com/logo.png'>", URL);

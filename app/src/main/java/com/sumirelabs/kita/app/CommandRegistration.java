@@ -1,29 +1,22 @@
 package com.sumirelabs.kita.app;
 
 import com.sumirelabs.kita.discord.Command;
+import com.sumirelabs.kita.logshare.LogShareListener;
+import discord4j.core.GatewayDiscordClient;
+import discord4j.discordjson.json.ApplicationCommandRequest;
+import java.util.ArrayList;
 import java.util.List;
-import net.dv8tion.jda.api.events.session.ReadyEvent;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
-public final class CommandRegistration extends ListenerAdapter {
-    private final List<Command> commands;
-    private final long developmentGuildId;
-    public CommandRegistration(List<Command> commands, long developmentGuildId) {
-        this.commands = List.copyOf(commands); this.developmentGuildId = developmentGuildId;
-    }
-    @Override public void onReady(ReadyEvent event) {
-        var definitions = new java.util.ArrayList<>(commands.stream().map(Command::definition).toList());
-        definitions.add(net.dv8tion.jda.api.interactions.commands.build.Commands.message(com.sumirelabs.kita.logshare.LogShareListener.COMMAND)
-                .setContexts(net.dv8tion.jda.api.interactions.InteractionContextType.GUILD));
-        var logger = LoggerFactory.getLogger(CommandRegistration.class);
-        if (developmentGuildId == 0 && event.getJDA().getShardInfo().getShardId() == 0) {
-            event.getJDA().updateCommands().addCommands(definitions)
-                    .queue(ignored -> logger.info("Registered global commands"), error -> logger.error("Command registration failed", error));
-        } else if (developmentGuildId != 0) {
-            var guild = event.getJDA().getGuildById(developmentGuildId);
-            if (guild != null) guild.updateCommands().addCommands(definitions)
-                    .queue(ignored -> logger.info("Registered development guild commands"), error -> logger.error("Command registration failed", error));
-        }
+public final class CommandRegistration {
+    private CommandRegistration() {}
+    public static Mono<Void> register(GatewayDiscordClient client, List<Command> commands, long developmentGuild) {
+        var definitions = new ArrayList<>(commands.stream().map(Command::definition).toList());
+        definitions.add(ApplicationCommandRequest.builder().name(LogShareListener.COMMAND).type(3).contexts(List.of(0)).build());
+        var service = client.getRestClient().getApplicationService();
+        return client.getRestClient().getApplicationId().flatMapMany(id -> developmentGuild == 0
+                ? service.bulkOverwriteGlobalApplicationCommand(id, definitions)
+                : service.bulkOverwriteGuildApplicationCommand(id, developmentGuild, definitions)).then()
+                .doOnSuccess(ignored -> org.slf4j.LoggerFactory.getLogger(CommandRegistration.class).info("Registered {} commands", definitions.size()));
     }
 }

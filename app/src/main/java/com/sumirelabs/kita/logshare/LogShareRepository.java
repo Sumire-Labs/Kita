@@ -1,13 +1,13 @@
 package com.sumirelabs.kita.logshare;
 
-import java.util.Optional;
+import reactor.core.publisher.Mono;
 
 public interface LogShareRepository {
     record Key(long guildId, long messageId, String item) {}
     record Share(String url, long replyId) {}
-    Optional<Share> find(Key key);
-    boolean claim(Key key);
-    void uploaded(Key key, String url);
-    void replied(Key key, long replyId);
-    void release(Key key);
+    Mono<Share> find(Key key);
+    Mono<Boolean> claim(Key key);
+    Mono<Void> uploaded(Key key, String url);
+    Mono<Void> replied(Key key, long replyId);
+    Mono<Void> release(Key key);
 }

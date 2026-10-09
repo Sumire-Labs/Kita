@@ -1,54 +1,35 @@
 package com.sumirelabs.kita.stay;
 
 import static org.junit.jupiter.api.Assertions.*;
-import java.lang.reflect.Proxy;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.GuildVoiceState;
-import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.SelfMember;
-import net.dv8tion.jda.api.entities.channel.unions.AudioChannelUnion;
+import static org.mockito.Mockito.*;
+import discord4j.common.util.Snowflake;
+import discord4j.core.object.VoiceState;
+import discord4j.core.object.entity.Guild;
+import discord4j.core.object.entity.Member;
+import discord4j.core.object.entity.channel.AudioChannel;
+import discord4j.rest.util.Permission;
+import discord4j.rest.util.PermissionSet;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
 
 class StayVoiceTest {
-    @FunctionalInterface interface Calls { Object invoke(String method); }
-    private static <T> T proxy(Class<T> type, Calls calls) {
-        return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type},
-                (instance, method, arguments) -> calls.invoke(method.getName())));
-    }
-    private static AudioChannelUnion channel(long id) {
-        return proxy(AudioChannelUnion.class, method -> method.equals("getIdLong") ? id : null);
-    }
-    private static GuildVoiceState state(AtomicReference<AudioChannelUnion> channel) {
-        return proxy(GuildVoiceState.class, method -> switch (method) {
-            case "inAudioChannel" -> channel.get() != null;
-            case "getChannel" -> channel.get();
-            default -> null;
-        });
-    }
     @Test void eachInteractionRechecksVoiceMembershipPermissionsAndTheBotsChannel() {
-        var userChannel = new AtomicReference<>(channel(10));
-        var botChannel = new AtomicReference<>(channel(10));
-        var permitted = new AtomicBoolean(true);
-        var self = proxy(SelfMember.class, method -> method.equals("getVoiceState") ? state(botChannel) : null);
-        var guild = proxy(Guild.class, method -> method.equals("getSelfMember") ? self : null);
-        var member = proxy(Member.class, method -> switch (method) {
-            case "getVoiceState" -> state(userChannel);
-            case "getGuild" -> guild;
-            case "hasPermission" -> permitted.get();
-            default -> null;
-        });
-        assertEquals(10, StayVoice.require(member));
-        permitted.set(false);
-        assertThrows(IllegalArgumentException.class, () -> StayVoice.require(member));
-        permitted.set(true);
-        botChannel.set(channel(20));
-        assertThrows(IllegalArgumentException.class, () -> StayVoice.require(member));
-        botChannel.set(null);
-        assertEquals(10, StayVoice.require(member), "Users can start a stay when the bot is disconnected");
-        userChannel.set(null);
-        assertThrows(IllegalArgumentException.class, () -> StayVoice.require(member));
-        assertThrows(IllegalArgumentException.class, () -> StayVoice.require(null));
+        var channel = mock(AudioChannel.class); when(channel.getId()).thenReturn(Snowflake.of(10));
+        var user = mock(Member.class); var bot = mock(Member.class); var guild = mock(Guild.class);
+        var state = mock(VoiceState.class); var botState = mock(VoiceState.class);
+        when(user.getGuild()).thenReturn(Mono.just(guild)); when(guild.getSelfMember()).thenReturn(Mono.just(bot));
+        when(user.getVoiceState()).thenReturn(Mono.just(state)); when(state.getChannel()).thenReturn(Mono.just(channel));
+        when(bot.getVoiceState()).thenReturn(Mono.just(botState)); when(botState.getChannelId()).thenReturn(Optional.of(Snowflake.of(10)));
+        when(channel.getEffectivePermissions(user)).thenReturn(Mono.just(PermissionSet.of(Permission.VIEW_CHANNEL, Permission.CONNECT)));
+        assertEquals(10, StayVoice.require(user).block());
+        when(channel.getEffectivePermissions(user)).thenReturn(Mono.just(PermissionSet.none()));
+        assertThrows(IllegalArgumentException.class, () -> StayVoice.require(user).block());
+        when(channel.getEffectivePermissions(user)).thenReturn(Mono.just(PermissionSet.of(Permission.VIEW_CHANNEL, Permission.CONNECT)));
+        when(botState.getChannelId()).thenReturn(Optional.of(Snowflake.of(20)));
+        assertThrows(IllegalArgumentException.class, () -> StayVoice.require(user).block());
+        when(bot.getVoiceState()).thenReturn(Mono.empty()); assertEquals(10, StayVoice.require(user).block());
+        when(user.getVoiceState()).thenReturn(Mono.empty());
+        assertThrows(IllegalArgumentException.class, () -> StayVoice.require(user).block());
     }
 }

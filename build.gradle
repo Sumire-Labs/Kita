@@ -4,7 +4,6 @@ plugins {
     id 'com.cleanroommc.tokenenvoy' version '3.0.0' apply false
 }
 ext {
-    jdaVersion = '6.7.0'
     jacksonVersion = '2.22.3'
 }
 subprojects {

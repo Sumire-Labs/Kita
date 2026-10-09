@@ -13,17 +13,16 @@ distributions {
         }
     }
 }
+configurations { mockitoAgent }
 dependencies {
     implementation project(':common')
-    implementation("net.dv8tion:JDA:${jdaVersion}") {
-        // Lavalink handles audio; JDA's Opus backend brings an incompatible legacy JNA.
-        exclude group: 'club.minnced', module: 'opus-java'
-    }
+    implementation 'com.discord4j:discord4j-core:3.3.3'
     implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
     implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${jacksonVersion}"
     implementation 'org.slf4j:slf4j-api:2.0.20'
-    implementation 'com.zaxxer:HikariCP:7.1.0'
-    implementation 'org.mariadb.jdbc:mariadb-java-client:3.5.10'
+    implementation 'org.mariadb:r2dbc-mariadb:1.4.2'
+    implementation 'io.r2dbc:r2dbc-pool:1.0.2.RELEASE'
+    runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.5.10' // Flyway startup migrations only.
     implementation 'org.flywaydb:flyway-core:13.10.0'
     implementation 'org.flywaydb:flyway-mysql:13.10.0'
     implementation 'com.github.oshi:oshi-core:7.7.0'
@@ -36,7 +35,10 @@ dependencies {
     runtimeOnly 'io.github.humbleui:skija-windows-x64:0.143.17'
     runtimeOnly 'io.github.humbleui:skija-linux-x64:0.143.17'
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.20'
+    testImplementation 'org.mockito:mockito-core:5.24.0'
+    mockitoAgent('org.mockito:mockito-core:5.24.0') { transitive = false }
 }
+tasks.named('test') { jvmArgs "-javaagent:${configurations.mockitoAgent.singleFile}" }
 tokenEnvoy {
     set 'VERSION', rootProject.version.toString()
     main { resources { include 'kita-build.properties' } }

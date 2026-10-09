@@ -1,6 +1,7 @@
 package com.sumirelabs.kita.previews;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static com.sumirelabs.kita.discord.Payloads.json;
 import org.junit.jupiter.api.Test;
 
 class SocialLinkTest {
@@ -18,10 +19,10 @@ class SocialLinkTest {
     @Test void rendererUsesSilentV2WithoutMentions() {
         var data = PreviewRenderer.render(new Preview("X", "author", "text", "https://x.com/u/status/1",
                 java.util.List.of("https://example.com/video.mp4"), "context", true), false);
-        assertTrue(data.isUsingComponentsV2());
-        assertTrue(data.isSuppressedNotifications());
-        assertTrue(data.getAllowedMentions().isEmpty());
-        assertFalse(data.toData().hasKey("embeds"));
-        assertTrue(data.toData().toString().contains("\"spoiler\":true"));
+        assertTrue(data.flags().get().contains(discord4j.core.object.entity.Message.Flag.IS_COMPONENTS_V2));
+        assertTrue(data.flags().get().contains(discord4j.core.object.entity.Message.Flag.SUPPRESS_NOTIFICATIONS));
+        assertTrue(json(data).get("allowed_mentions").get("parse").isEmpty());
+        assertFalse(json(data).has("embeds"));
+        assertTrue(json(data).toString().contains("\"spoiler\":true"));
     }
 }

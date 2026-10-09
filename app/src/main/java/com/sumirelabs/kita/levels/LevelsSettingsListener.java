@@ -1,113 +1,68 @@
 package com.sumirelabs.kita.levels;
 
+import com.sumirelabs.kita.discord.Forms;
+import com.sumirelabs.kita.discord.InteractionContext;
 import com.sumirelabs.kita.discord.Ui;
-import com.sumirelabs.kita.discord.WorkExecutor;
+import com.sumirelabs.kita.settings.GuildSettings;
 import com.sumirelabs.kita.settings.SettingsRepository;
+import discord4j.core.event.domain.interaction.ButtonInteractionEvent;
+import discord4j.core.event.domain.interaction.ComponentInteractionEvent;
+import discord4j.core.event.domain.interaction.SelectMenuInteractionEvent;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
-import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
-import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
-import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.components.ComponentInteraction;
-import net.dv8tion.jda.api.modals.Modal;
-import net.dv8tion.jda.api.components.label.Label;
-import net.dv8tion.jda.api.components.textinput.TextInput;
-import net.dv8tion.jda.api.components.textinput.TextInputStyle;
+import java.util.function.Function;
+import reactor.core.publisher.Mono;
 
-public final class LevelsSettingsListener extends ListenerAdapter {
-    private final SettingsRepository repository; private final LevelsService levels; private final WorkExecutor worker;
-    private final Map<Long, Object> locks = new ConcurrentHashMap<>();
-    public LevelsSettingsListener(SettingsRepository repository, LevelsService levels, WorkExecutor worker) {
-        this.repository = repository; this.levels = levels; this.worker = worker;
-    }
-    public LevelSettingsModals modals() { return new LevelSettingsModals(repository, levels, worker, locks); }
-    private boolean accept(ComponentInteraction event) {
-        if (!event.getComponentId().startsWith("levels-settings:")) return false;
-        if (!event.isFromGuild() || !event.getComponentId().split(":")[1].equals(event.getUser().getId())
-                || event.getMember() == null || !event.getMember().hasPermission(Permission.MANAGE_SERVER)) {
-            event.reply(Ui.text("Levels", "この設定を操作する権限がありません。")).setEphemeral(true).queue(); return false;
-        }
-        return true;
-    }
-    @Override public void onButtonInteraction(ButtonInteractionEvent event) {
-        if (!accept(event)) return;
-        String[] parts = event.getComponentId().split(":");
-        if (parts[2].equals("amounts")) {
-            event.replyModal(Modal.create("levels-modal:" + event.getUser().getId() + ":amounts", "XP量・間隔")
-                    .addComponents(input("chatXp", "Chat XP（1〜10000）", parts.length > 5 ? parts[3] : "20"),
-                            input("cooldown", "Chat間隔・秒（10〜3600）", parts.length > 5 ? parts[4] : "60"),
-                            input("voiceXp", "VC XP・1分あたり（1〜10000）", parts.length > 5 ? parts[5] : "5")).build()).queue(); return;
-        }
+public final class LevelsSettingsListener {
+    private final SettingsRepository repository;
+    private final LevelsService levels;
+    public LevelsSettingsListener(SettingsRepository repository, LevelsService levels) { this.repository = repository; this.levels = levels; }
+    public LevelSettingsModals modals() { return new LevelSettingsModals(repository, levels); }
+    public Mono<Void> button(ButtonInteractionEvent event) {
+        if (!event.getCustomId().startsWith("levels-settings:")) return Mono.empty();
+        var context = new InteractionContext(event); var parts = event.getCustomId().split(":");
+        if (!owner(context, parts)) return context.privateReply(Ui.text("Levels", "この設定を操作する権限がありません。"));
+        if (parts[2].equals("amounts")) return context.member().flatMap(member -> LevelSettingsAccess.require(member, false))
+                .then(event.presentModal(Forms.modal("levels-modal:" + context.userId() + ":amounts", "XP量・間隔",
+                        Forms.input("chatXp", "Chat XP（1〜10000）", 6, parts.length > 5 ? parts[3] : "20"),
+                        Forms.input("cooldown", "Chat間隔・秒（10〜3600）", 6, parts.length > 5 ? parts[4] : "60"),
+                        Forms.input("voiceXp", "VC XP・1分あたり（1〜10000）", 6, parts.length > 5 ? parts[5] : "5"))))
+                .onErrorResume(error -> context.privateReply(Ui.text("Levels", "サーバー管理権限が必要です。")));
         if (parts[2].equals("toggle") && Set.of("enabled", "chat", "voice", "mutedVoice").contains(parts[3])) {
-            update(event, parts[3].equals("voice") || parts[3].equals("mutedVoice") ? "voice" : "chat", false, () -> {
-                var old = repository.get(event.getGuild().getIdLong());
-                boolean value = Boolean.parseBoolean(old.value("levels." + parts[3], parts[3].equals("enabled") ? "false" : "true"));
-                return Map.of("levels." + parts[3], String.valueOf(!value));
-            });
+            return update(event, parts[3].equals("voice") || parts[3].equals("mutedVoice") ? "voice" : "chat", false, old ->
+                    Map.of("levels." + parts[3], String.valueOf(!Boolean.parseBoolean(old.value("levels." + parts[3],
+                            parts[3].equals("enabled") ? "false" : "true")))));
         }
+        return Mono.empty();
     }
-    @Override public void onStringSelectInteraction(StringSelectInteractionEvent event) {
-        if (!accept(event)) return;
-        String action = event.getComponentId().split(":")[2], value = event.getValues().getFirst();
-        if (action.equals("page")) { update(event, value, false, Map::of); return; }
-        if (action.equals("rewardMode") && Set.of("stack", "highest").contains(value)) {
-            update(event, "rewards", true, () -> Map.of("levels.rewardsMode", value));
-        } else if (action.equals("notice") && Set.of("off", "levels", "rewards").contains(value)) {
-            update(event, "rewards", false, () -> Map.of("levels.notice", value));
-        } else if (action.equals("rewardDelete")) update(event, "rewards", true, () -> {
-            var old = new java.util.ArrayList<>(LevelReward.read(repository.get(event.getGuild().getIdLong())));
-            old.removeIf(reward -> reward.roleId() == Long.parseLong(value));
-            return Map.of("levels.rewards", LevelReward.write(old));
+    public Mono<Void> select(SelectMenuInteractionEvent event) {
+        if (!event.getCustomId().startsWith("levels-settings:")) return Mono.empty();
+        var context = new InteractionContext(event); var parts = event.getCustomId().split(":");
+        if (!owner(context, parts)) return context.privateReply(Ui.text("Levels", "この設定を操作する権限がありません。"));
+        String action = parts[2];
+        if (action.equals("rewardRole")) return context.member().flatMap(member -> LevelSettingsAccess.require(member, true))
+                .then(event.presentModal(Forms.modal("levels-modal:" + context.userId() + ":reward:" + event.getValues().getFirst(), "報酬レベル",
+                        Forms.input("level", "必要レベル（1〜100000）", 6))))
+                .onErrorResume(error -> context.privateReply(Ui.text("Levels", "サーバー管理・ロール管理権限が必要です。")));
+        if (Set.of("channels", "roles", "noticeChannel").contains(action)) return update(event, action.equals("noticeChannel") ? "rewards" : "chat",
+                false, old -> Map.of("levels." + action, String.join(",", event.getValues())));
+        var value = event.getValues().getFirst();
+        if (action.equals("page")) return update(event, value, false, old -> Map.of());
+        if (action.equals("rewardMode") && Set.of("stack", "highest").contains(value)) return update(event, "rewards", true, old -> Map.of("levels.rewardsMode", value));
+        if (action.equals("notice") && Set.of("off", "levels", "rewards").contains(value)) return update(event, "rewards", false, old -> Map.of("levels.notice", value));
+        if (action.equals("rewardDelete")) return update(event, "rewards", true, old -> {
+            var rewards = new java.util.ArrayList<>(LevelReward.read(old)); rewards.removeIf(reward -> reward.roleId() == Long.parseLong(value));
+            return Map.of("levels.rewards", LevelReward.write(rewards));
         });
+        return Mono.empty();
     }
-    @Override public void onEntitySelectInteraction(EntitySelectInteractionEvent event) {
-        if (!accept(event)) return;
-        String action = event.getComponentId().split(":")[2];
-        if (action.equals("rewardRole")) {
-            if (!event.getMember().hasPermission(Permission.MANAGE_ROLES)) {
-                event.reply(Ui.text("Levels", "ロール管理権限が必要です。")).setEphemeral(true).queue(); return;
-            }
-            event.replyModal(Modal.create("levels-modal:" + event.getUser().getId() + ":reward:" + event.getValues().getFirst().getId(), "報酬レベル")
-                    .addComponents(input("level", "必要レベル（1〜100000）")).build()).queue(); return;
-        }
-        if (Set.of("channels", "roles", "noticeChannel").contains(action)) {
-            String values = event.getValues().stream().map(entity -> entity.getId()).collect(java.util.stream.Collectors.joining(","));
-            update(event, action.equals("noticeChannel") ? "rewards" : "chat", false, () -> Map.of("levels." + action, values));
-        }
+    private Mono<Void> update(ComponentInteractionEvent event, String page, boolean rewards, Function<GuildSettings, Map<String, String>> changes) {
+        var context = new InteractionContext(event);
+        return context.deferEdit().then(LevelSettingsAccess.modify(repository, context, rewards, changes)).flatMap(updated -> {
+            levels.invalidate(updated.guildId()); return context.edit(LevelsSettings.render(updated, context.userId(), page));
+        }).onErrorResume(error -> context.followup(Ui.text("Levels", error instanceof IllegalArgumentException ? error.getMessage() : "設定を保存できませんでした。"), true));
     }
-    private void update(ComponentInteraction event, String page, boolean rewardEdit, Supplier<Map<String, String>> changes) {
-        event.deferEdit().queue(hook -> {
-            if (!worker.submit(() -> {
-                try {
-                    var member = event.getGuild().retrieveMemberById(event.getUser().getIdLong()).complete();
-                    require(member, rewardEdit);
-                    synchronized (locks.computeIfAbsent(event.getGuild().getIdLong(), ignored -> new Object())) {
-                        if (rewardEdit) for (var reward : LevelReward.read(repository.get(event.getGuild().getIdLong()))) {
-                            var role = event.getGuild().getRoleById(reward.roleId());
-                            if (role != null && !member.canInteract(role)) throw new IllegalArgumentException("操作できない報酬ロールがあります。");
-                        }
-                        var updated = repository.update(event.getGuild().getIdLong(), changes.get()); levels.invalidate(updated.guildId());
-                        hook.editOriginal(Ui.edit(LevelsSettings.render(updated, event.getUser().getIdLong(), page))).queue();
-                    }
-                } catch (Exception error) { hook.sendMessage(Ui.text("Levels", error instanceof IllegalArgumentException ? error.getMessage() : "設定を保存できませんでした。"))
-                        .setEphemeral(true).queue(); }
-            })) hook.sendMessage(Ui.text("Levels", "現在混み合っています。")).setEphemeral(true).queue();
-        });
-    }
-    static void require(Member member, boolean rewards) {
-        if (!member.hasPermission(Permission.MANAGE_SERVER) || rewards && !member.hasPermission(Permission.MANAGE_ROLES)) {
-            throw new IllegalArgumentException(rewards ? "サーバー管理・ロール管理権限が必要です。" : "サーバー管理権限が必要です。");
-        }
-    }
-    static Label input(String id, String label) {
-        return Label.of(label, TextInput.create(id, TextInputStyle.SHORT).setMaxLength(6).build());
-    }
-    static Label input(String id, String label, String value) {
-        return Label.of(label, TextInput.create(id, TextInputStyle.SHORT).setMaxLength(6).setValue(value).build());
+    static boolean owner(InteractionContext context, String[] parts) {
+        return context.event().getInteraction().getGuildId().isPresent() && parts.length > 2 && context.owner(parts[1]);
     }
 }

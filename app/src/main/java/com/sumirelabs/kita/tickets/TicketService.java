@@ -1,101 +1,86 @@
 package com.sumirelabs.kita.tickets;
 
-import com.sumirelabs.kita.settings.SettingsRepository;
-import com.sumirelabs.kita.tickets.TicketRepository;
+import com.sumirelabs.kita.discord.Access;
 import com.sumirelabs.kita.discord.Ui;
-import java.util.EnumSet;
-import java.util.function.LongFunction;
-import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.Member;
-import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import com.sumirelabs.kita.settings.SettingsRepository;
+import discord4j.core.GatewayDiscordClient;
+import discord4j.core.object.entity.Member;
+import discord4j.core.object.entity.channel.Category;
+import discord4j.core.object.entity.channel.TextChannel;
+import discord4j.core.spec.TextChannelCreateSpec;
+import discord4j.core.spec.TextChannelEditSpec;
+import discord4j.rest.util.Permission;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import reactor.core.publisher.Mono;
 
 public final class TicketService {
+    private record Opening(long guild, long owner, AtomicReference<TextChannel> channel, AtomicBoolean activated) {}
     private final SettingsRepository settings;
     private final TicketRepository tickets;
     private final TicketTranscript transcripts;
-    private final LongFunction<Guild> guilds;
-
-    public TicketService(SettingsRepository settings, TicketRepository tickets, TicketTranscript transcripts,
-                         LongFunction<Guild> guilds) {
-        this.settings = settings; this.tickets = tickets; this.transcripts = transcripts; this.guilds = guilds;
+    private final GatewayDiscordClient client;
+    public TicketService(SettingsRepository settings, TicketRepository tickets, TicketTranscript transcripts, GatewayDiscordClient client) {
+        this.settings = settings; this.tickets = tickets; this.transcripts = transcripts; this.client = client;
     }
-
-    public void publish(long guildId) {
-        var config = settings.get(guildId);
-        var channel = guilds.apply(guildId).getTextChannelById(config.snowflake("ticket.panel"));
-        if (channel == null) throw new IllegalArgumentException("受付パネルの配置先を設定してください。");
-        channel.sendMessage(TicketPanel.reception(config)).complete();
+    public Mono<Void> publish(long guild) {
+        return settings.get(guild).flatMap(config -> client.getChannelById(Access.id(config.snowflake("ticket.panel"))).ofType(TextChannel.class)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("受付パネルの配置先を設定してください。")))
+                .flatMap(channel -> channel.createMessage(TicketPanel.reception(config)))).then();
     }
-
-    public TextChannel open(Member member, String subject, String details) {
-        var guild = member.getGuild();
-        var config = settings.get(guild.getIdLong());
-        if (!config.enabled("ticket.enabled")) throw new IllegalArgumentException("チケットは無効です。");
-        var category = guild.getCategoryById(config.snowflake("ticket.category"));
-        var role = guild.getRoleById(config.snowflake("ticket.role"));
-        if (category == null || role == null || role.isPublicRole() || role.isManaged()) {
-            throw new IllegalArgumentException("作成先カテゴリと担当ロールの設定を確認してください。");
-        }
-        if (!tickets.reserve(guild.getIdLong(), member.getIdLong(), subject, role.getIdLong())) {
-            throw new IllegalArgumentException("既に対応中のチケットがあります。");
-        }
-        TextChannel channel = null;
-        try {
-            var access = EnumSet.of(Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND, Permission.MESSAGE_HISTORY,
-                    Permission.MESSAGE_ATTACH_FILES);
-            channel = guild.createTextChannel("ticket-" + member.getId(), category)
-                    .clearPermissionOverrides()
-                    .setTopic("kita:ticket:" + guild.getId() + ":" + member.getId())
-                    .addPermissionOverride(guild.getPublicRole(), null, EnumSet.of(Permission.VIEW_CHANNEL))
-                    .addPermissionOverride(member, access, null).addPermissionOverride(role, access, null)
-                    .addPermissionOverride(guild.getSelfMember(), EnumSet.of(Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND,
-                            Permission.MESSAGE_HISTORY, Permission.MANAGE_CHANNEL, Permission.MANAGE_PERMISSIONS), null)
-                    .complete();
-            channel.sendMessage(TicketPanel.controls(subject, details)).complete();
-            tickets.activate(guild.getIdLong(), member.getIdLong(), channel.getIdLong());
-            return channel;
-        } catch (Exception error) {
-            try { if (channel != null) channel.delete().complete(); }
-            finally { tickets.release(guild.getIdLong(), member.getIdLong()); }
-            throw error;
-        }
+    public Mono<TextChannel> open(Member member, String subject, String details) {
+        long guildId = member.getGuildId().asLong(), owner = member.getId().asLong();
+        return settings.get(guildId).flatMap(config -> {
+            if (!config.enabled("ticket.enabled")) return Mono.error(new IllegalArgumentException("チケットは無効です。"));
+            long roleId = config.snowflake("ticket.role");
+            return member.getGuild().flatMap(guild -> guild.getRoleById(Access.id(roleId))
+                    .filter(role -> !role.isManaged() && role.getId().asLong() != guildId)
+                    .switchIfEmpty(Mono.error(new IllegalArgumentException("担当ロールの設定を確認してください。")))
+                    .then(client.getChannelById(Access.id(config.snowflake("ticket.category"))).ofType(Category.class)
+                            .switchIfEmpty(Mono.error(new IllegalArgumentException("作成先カテゴリを設定してください。"))))
+                    .flatMap(category -> Mono.usingWhen(tickets.reserve(guildId, owner, subject, roleId).flatMap(reserved -> reserved
+                                    ? Mono.just(new Opening(guildId, owner, new AtomicReference<>(), new AtomicBoolean()))
+                                    : Mono.error(new IllegalArgumentException("既に対応中のチケットがあります。"))),
+                            opening -> guild.createTextChannel(TextChannelCreateSpec.builder().name("ticket-" + owner).parentId(category.getId())
+                                            .topic("kita:ticket:" + guildId + ":" + owner)
+                                            .permissionOverwrites(TicketPermissions.initial(guildId, owner, roleId, client.getSelfId().asLong())).build())
+                                    .doOnNext(opening.channel::set)
+                                    .flatMap(channel -> channel.createMessage(TicketPanel.controls(subject, details))
+                                            .then(tickets.activate(guildId, owner, channel.getId().asLong()))
+                                            .doOnSuccess(ignored -> opening.activated.set(true)).thenReturn(channel)),
+                            opening -> Mono.empty(), (opening, error) -> clean(opening), this::clean)));
+        });
     }
-
-    public void claim(Member member, TextChannel channel) {
-        authorize(member, channel);
-        tickets.claim(channel.getGuild().getIdLong(), channel.getIdLong(), member.getIdLong());
-        channel.sendMessage(Ui.text("担当者", Ui.safe(member.getEffectiveName()) + " が担当します。")).complete();
+    private Mono<Void> clean(Opening opening) {
+        // An unacknowledged create request may still have created a channel; recovery keeps its reservation.
+        if (opening.activated.get() || opening.channel.get() == null) return Mono.empty();
+        return tickets.release(opening.guild, opening.owner).flatMap(released ->
+                released && opening.channel.get() != null ? opening.channel.get().delete() : Mono.empty());
     }
-
-    public void close(Member member, TextChannel channel) throws Exception {
-        authorize(member, channel);
-        var guildId = channel.getGuild().getIdLong();
-        var record = tickets.find(guildId, channel.getIdLong()).orElseThrow();
-        if (!tickets.beginClose(guildId, channel.getIdLong())) throw new IllegalArgumentException("既にクローズ処理中です。");
-        try {
-            channel.getManager().putMemberPermissionOverride(record.ownerId(),
-                    EnumSet.of(Permission.VIEW_CHANNEL, Permission.MESSAGE_HISTORY),
-                    EnumSet.of(Permission.MESSAGE_SEND, Permission.MESSAGE_SEND_IN_THREADS,
-                            Permission.CREATE_PUBLIC_THREADS, Permission.CREATE_PRIVATE_THREADS))
-                    .putRolePermissionOverride(record.supportRoleId(), EnumSet.of(Permission.VIEW_CHANNEL, Permission.MESSAGE_HISTORY),
-                            EnumSet.of(Permission.MESSAGE_SEND, Permission.MESSAGE_SEND_IN_THREADS)).complete();
-            var transcript = transcripts.save(channel);
-            channel.getManager().setName("closed-" + channel.getId()).complete();
-            channel.sendMessage(Ui.text("チケットをクローズしました", "履歴を保存しました。担当者: "
-                    + Ui.safe(member.getEffectiveName()) + "\n保存ID: " + transcript.getFileName())).complete();
-            tickets.close(guildId, channel.getIdLong());
-        } catch (Exception error) {
-            if (!channel.getName().startsWith("closed-")) TicketRecovery.restorePermissions(channel, record);
-            tickets.abortClose(guildId, channel.getIdLong()); throw error;
-        }
+    public Mono<Void> claim(Member member, TextChannel channel) {
+        return authorize(member, channel).then(tickets.claim(channel.getGuildId().asLong(), channel.getId().asLong(), member.getId().asLong()))
+                .then(channel.createMessage(Ui.text("担当者", Ui.safe(member.getDisplayName()) + " が担当します。"))).then();
     }
-
-    private void authorize(Member member, TextChannel channel) {
-        var record = tickets.find(channel.getGuild().getIdLong(), channel.getIdLong());
-        if (record.isEmpty() || (!member.hasPermission(Permission.MANAGE_SERVER)
-                && member.getRoles().stream().noneMatch(role -> role.getIdLong() == record.get().supportRoleId()))) {
-            throw new IllegalArgumentException("チケット担当者の権限が必要です。");
-        }
+    public Mono<Void> close(Member member, TextChannel channel) {
+        long guild = channel.getGuildId().asLong(), id = channel.getId().asLong();
+        return authorize(member, channel).flatMap(record -> tickets.beginClose(guild, id).flatMap(acquired -> {
+            if (!acquired) return Mono.error(new IllegalArgumentException("既にクローズ処理中です。"));
+            return TicketPermissions.change(channel, record, true).then(transcripts.save(channel))
+                    .flatMap(path -> channel.edit(TextChannelEditSpec.builder().name("closed-" + id).build())
+                            .flatMap(updated -> updated.createMessage(Ui.text("チケットをクローズしました", "履歴を保存しました。担当者: "
+                                    + Ui.safe(member.getDisplayName()) + "\n保存ID: " + path.getFileName()))))
+                    .then(tickets.close(guild, id)).onErrorResume(error -> client.withRetrievalStrategy(discord4j.core.retriever.EntityRetrievalStrategy.REST)
+                            .getChannelById(channel.getId()).ofType(TextChannel.class).flatMap(fresh -> fresh.getName().startsWith("closed-")
+                                    ? Mono.empty() : TicketPermissions.change(fresh, record, false).then(tickets.abortClose(guild, id)))
+                            .onErrorResume(cleanError -> Mono.empty()).then(Mono.error(error)));
+        }));
+    }
+    public Mono<TicketRecord> authorize(Member member, TextChannel channel) {
+        return tickets.find(channel.getGuildId().asLong(), channel.getId().asLong())
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("チケットが見つかりません。")))
+                .flatMap(record -> Access.has(member, Permission.MANAGE_GUILD).flatMap(manager ->
+                        manager || member.getRoleIds().contains(Access.id(record.supportRoleId())) ? Mono.just(record)
+                                : Mono.error(new IllegalArgumentException("チケット担当者の権限が必要です。"))))
+                .flatMap(record -> Access.channel(member, channel, Permission.VIEW_CHANNEL).thenReturn(record));
     }
 }
