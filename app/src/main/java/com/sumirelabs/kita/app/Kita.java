@@ -18,6 +18,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.sharding.DefaultShardManagerBuilder;
 import net.dv8tion.jda.api.sharding.ShardManager;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.slf4j.LoggerFactory;
 
 public final class Kita implements AutoCloseable {
@@ -52,6 +53,7 @@ public final class Kita implements AutoCloseable {
         }
         var builder = DefaultShardManagerBuilder.createLight(config.bot().token(), GatewayIntent.GUILD_MESSAGES,
                         GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.GUILD_VOICE_STATES)
+                .enableCache(CacheFlag.VOICE_STATE)
                 .setMemberCachePolicy(MemberCachePolicy.VOICE).setEnableShutdownHook(false)
                 .setShardsTotal(config.bot().shards() == 0 ? -1 : config.bot().shards())
                 .setActivity(Activity.playing("v" + buildVersion + " • /settings • k!"));
