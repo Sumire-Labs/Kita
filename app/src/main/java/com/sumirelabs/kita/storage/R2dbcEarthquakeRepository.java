@@ -36,7 +36,7 @@ public final class R2dbcEarthquakeRepository implements EarthquakeRepository {
         var lease = new Lease(notice.key(), guild, channel, UUID.randomUUID().toString());
         return sql.update("INSERT IGNORE INTO earthquake_deliveries (event_key, guild_id, channel_id) VALUES (?, ?, ?)",
                         notice.key(), guild, channel)
-                .then(sql.update("UPDATE earthquake_deliveries SET lease_id = ?, leased_until = DATE_ADD(NOW(), INTERVAL 5 MINUTE)"
+                .then(sql.update("UPDATE earthquake_deliveries SET lease_id = ?, leased_until = DATE_ADD(NOW(), INTERVAL 1 MINUTE)"
                         + WHERE + " AND notice_token <> ? AND (leased_until IS NULL OR leased_until < NOW())",
                         lease.owner(), notice.key(), guild, channel, notice.token()))
                 .flatMap(rows -> rows == 1 ? Mono.just(lease) : Mono.empty());

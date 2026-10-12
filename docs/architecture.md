@@ -28,6 +28,7 @@ Ticket・設定の契約はBot専用なので、`app`の各機能パッケージ
 | stay | VC常駐、退出タイマー、常駐用Components V2パネル |
 | logshare | ログ判定、mclogs-java、共有権限、添付・本文のサイレント共有 |
 | levels | Chat/VC XP、順位、報酬ロール、Skijaのプロフィール画像、設定パネル |
+| earthquake | 取得元アダプター、地震・津波通知、条件設定、配信履歴と再試行 |
 
 新しい機能は`app`で`Command`やDiscord4Jイベント処理を登録します。
 外部データ取得・状態管理・表示を分離する方針は、パッケージ単位で維持します。

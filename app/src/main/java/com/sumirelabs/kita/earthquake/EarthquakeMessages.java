@@ -50,6 +50,6 @@ public final class EarthquakeMessages {
     }
     public static MessageCreateSpec preview() {
         return Ui.text("【通知テスト】地震・津波通知", "これは表示確認用のサンプルです。実際の地震情報ではありません。\n"
-                + "緊急地震速報（警報）・観測地震情報・津波情報をこの形式のComponents V2で表示します。");
+                + "緊急地震速報（警報）・観測地震情報・津波情報をこの形式で表示します。");
     }
 }

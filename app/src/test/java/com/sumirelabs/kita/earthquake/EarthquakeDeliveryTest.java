@@ -26,11 +26,12 @@ class EarthquakeDeliveryTest {
         final SettingsRepository settings = mock(SettingsRepository.class);
         final TextChannel channel = mock(TextChannel.class);
         final Message message = mock(Message.class);
+        final Guild guild = mock(Guild.class);
+        final Member bot = mock(Member.class);
         final MemoryEarthquakes repository = new MemoryEarthquakes();
         final EarthquakeDelivery delivery = new EarthquakeDelivery(client, settings, repository);
         final MockedStatic<Access> access = mockStatic(Access.class);
         Context() {
-            var guild = mock(Guild.class); var bot = mock(Member.class);
             when(client.getSelfId()).thenReturn(Snowflake.of(99)); when(client.getGuilds()).thenReturn(Flux.just(guild));
             when(guild.getId()).thenReturn(Snowflake.of(1)); when(channel.getGuildId()).thenReturn(Snowflake.of(1));
             when(channel.getGuild()).thenReturn(Mono.just(guild)); when(guild.getSelfMember()).thenReturn(Mono.just(bot));
@@ -72,6 +73,16 @@ class EarthquakeDeliveryTest {
             assertTrue(context.repository.leases.isEmpty());
         }
     }
+    @Test void aLeaseHeldByAnInterruptedSenderRemainsPendingForRetry() {
+        try (var context = new Context()) {
+            context.repository.busy = true;
+            assertFalse(context.delivery.send(Notices.warning(1, false)).block());
+            verify(context.channel, never()).createMessage(any(MessageCreateSpec.class));
+            context.repository.busy = false;
+            assertTrue(context.delivery.send(Notices.warning(1, false)).block());
+            verify(context.channel).createMessage(any(MessageCreateSpec.class));
+        }
+    }
     @Test void failuresRemainRetryableAndCancellationReleasesTheLease() {
         try (var context = new Context()) {
             when(context.channel.createMessage(any(MessageCreateSpec.class))).thenReturn(Mono.error(new IllegalStateException("offline")));
@@ -94,6 +105,25 @@ class EarthquakeDeliveryTest {
             when(context.settings.get(1)).thenReturn(Mono.just(context.config("new", ""))).thenReturn(Mono.just(new GuildSettings(1, Map.of())));
             assertTrue(context.delivery.send(Notices.warning(3, false)).block());
             verify(context.channel, times(1)).createMessage(any(MessageCreateSpec.class));
+        }
+    }
+    @Test void mentionPermissionUsesTheNotificationChannelOverrides() {
+        try (var context = new Context()) {
+            var role = mock(discord4j.core.object.entity.Role.class);
+            when(role.getId()).thenReturn(Snowflake.of(123));
+            when(context.guild.getRoleById(Snowflake.of(123))).thenReturn(Mono.just(role));
+            when(context.settings.get(1)).thenReturn(Mono.just(new GuildSettings(1, Map.of(
+                    "earthquake.enabled", "true", "earthquake.channels", "10", "earthquake.role", "123"))));
+            when(context.channel.getEffectivePermissions(context.bot)).thenReturn(Mono.just(discord4j.rest.util.PermissionSet.none()));
+            var messages = new java.util.ArrayList<MessageCreateSpec>();
+            when(context.channel.createMessage(any(MessageCreateSpec.class))).thenAnswer(call -> {
+                messages.add(call.getArgument(0)); return Mono.just(context.message);
+            });
+            assertTrue(context.delivery.send(Notices.warning(1, false)).block());
+            when(context.channel.getEffectivePermissions(context.bot)).thenReturn(Mono.just(discord4j.rest.util.PermissionSet.of(Permission.MENTION_EVERYONE)));
+            assertTrue(context.delivery.send(Notices.warning(2, false)).block());
+            assertTrue(com.sumirelabs.kita.discord.Payloads.json(messages.get(0)).path("allowed_mentions").path("roles").isEmpty());
+            assertEquals("123", com.sumirelabs.kita.discord.Payloads.json(messages.get(1)).path("allowed_mentions").path("roles").get(0).asText());
         }
     }
 }

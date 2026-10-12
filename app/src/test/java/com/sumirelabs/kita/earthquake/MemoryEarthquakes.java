@@ -12,6 +12,7 @@ final class MemoryEarthquakes implements EarthquakeRepository {
     final Map<String, EarthquakeNotice> events = new ConcurrentHashMap<>();
     private final Map<Key, Delivery> deliveries = new ConcurrentHashMap<>();
     final Map<String, Lease> leases = new ConcurrentHashMap<>();
+    boolean busy;
     public Mono<Boolean> accept(EarthquakeNotice notice) { return Mono.fromSupplier(() -> {
         var previous = events.putIfAbsent(notice.key(), notice);
         if (previous == null) return true;
@@ -21,6 +22,7 @@ final class MemoryEarthquakes implements EarthquakeRepository {
     public Flux<EarthquakeNotice> recent(Instant since) { return Flux.fromIterable(events.values()); }
     public Mono<Delivery> delivery(String key, long guild, long channel) { return Mono.defer(() -> Mono.justOrEmpty(deliveries.get(new Key(key, guild, channel)))); }
     public Mono<Lease> claim(EarthquakeNotice notice, long guild, long channel) {
+        if (busy) return Mono.empty();
         return delivery(notice.key(), guild, channel).defaultIfEmpty(new Delivery(0, "", "")).flatMap(previous -> {
             if (previous.token().equals(notice.token())) return Mono.empty();
             var lease = new Lease(notice.key(), guild, channel, UUID.randomUUID().toString()); leases.put(lease.owner(), lease); return Mono.just(lease);
