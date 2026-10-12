@@ -9,7 +9,7 @@ Java 25 / Discord4J / MariaDB (R2DBC) / Lavalinkで構成する、複数の物�
 3. HRIRのWAVを`presets/`へ配置。サブフォルダも使用できます。
 4. Ubuntuでは`sudo chown -R 10001:10001 data`で保存先の書き込み権限を設定。
 5. `docker compose up -d --build`で起動。
-6. `/settings`で機能を有効化。初期状態ではプレビュー・翻訳・チケット・LogShare・Levelsは無効です。
+6. `/settings`で機能を有効化。初期状態ではプレビュー・翻訳・チケット・LogShare・Levels・地震通知は無効です。
 
 Discord Developer Portalで**Message Content Intent**を有効にしてください。
 招待スコープは`bot`と`applications.commands`を使用します。
@@ -23,6 +23,7 @@ Discord Developer Portalで**Message Content Intent**を有効にしてくださ
 | `/avatar user: server:` | ユーザーまたはサーバーアバター |
 | `/fastfetch` | JVM・OS・CPU・稼働時間 |
 | `/settings` | サーバー別の設定パネル |
+| `/quake` | 直近の観測地震情報（P2P地震情報） |
 | `/ticket` | 問い合わせ受付 |
 | `/play query:` | URL・検索・公開プレイリスト |
 | `/stop` `/skip` | 停止・次の曲 |

@@ -10,6 +10,7 @@ import com.sumirelabs.kita.settings.*;
 import com.sumirelabs.kita.stay.*;
 import com.sumirelabs.kita.tickets.*;
 import com.sumirelabs.kita.translation.*;
+import com.sumirelabs.kita.earthquake.*;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.event.domain.VoiceStateUpdateEvent;
 import discord4j.core.event.domain.guild.GuildDeleteEvent;
@@ -28,12 +29,21 @@ import reactor.core.publisher.Mono;
 public final class FeatureWiring implements AutoCloseable {
     private final Disposable.Composite subscriptions = Disposables.composite();
     private final List<Command> commands;
+    private final EarthquakeService earthquakes;
     public FeatureWiring(GatewayDiscordClient client, KitaConfig config, SettingsRepository settings, TicketRepository tickets,
-                         MusicService music, StayService stay, String version, LogShareRepository logs, LevelsService levels, VoiceXpListener voiceXp) {
+                         MusicService music, StayService stay, String version, LogShareRepository logs, LevelsService levels, VoiceXpListener voiceXp,
+                         EarthquakeRepository earthquakeRepository) {
+        var feed = new P2pEarthquakeProvider();
+        earthquakes = new EarthquakeService(client, settings, earthquakeRepository, feed);
+        var earthquakeSettings = new EarthquakeSettingsListener(settings, feed);
+        subscriptions.add(Events.listen(client, ButtonInteractionEvent.class, earthquakeSettings::button));
+        subscriptions.add(Events.listen(client, SelectMenuInteractionEvent.class, earthquakeSettings::select));
+        subscriptions.add(Events.listen(client, ModalSubmitInteractionEvent.class, earthquakeSettings::modal));
         var service = new TicketService(settings, tickets, new TicketTranscript(Path.of(config.dataDirectory()).resolve("transcripts")), client);
         var all = new ArrayList<Command>();
         all.add(new PingCommand()); all.add(new AvatarCommand()); all.add(new FastFetchCommand(version));
         all.add(new SettingsCommand(settings)); all.add(new TicketCommand(settings)); all.add(new StayCommand(stay));
+        all.add(new QuakeCommand(feed));
         var images = new ProfileImages();
         all.add(new LevelsCommand(levels, images, "profile")); all.add(new LevelsCommand(levels, images, "leaderboard"));
         var chat = new ChatXpListener(levels); var board = new LeaderboardListener(levels);
@@ -81,5 +91,6 @@ public final class FeatureWiring implements AutoCloseable {
         subscriptions.add(Events.listen(client, MessageCreateEvent.class, router::prefix));
     }
     public List<Command> commands() { return commands; }
-    @Override public void close() { subscriptions.dispose(); }
+    public void start() { earthquakes.start(); }
+    @Override public void close() { earthquakes.close(); subscriptions.dispose(); }
 }

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class SettingsPanelTest {
     @Test void eachPageFitsDiscordAndIsSilentV2() {
-        for (var page : new String[]{"home", "previews", "translation", "ticket", "logshare", "levels"}) {
+        for (var page : new String[]{"home", "previews", "translation", "ticket", "logshare", "levels", "earthquake"}) {
             var data = SettingsPanel.render(new GuildSettings(1, Map.of()), 2, page);
             assertTrue(data.flags().get().contains(discord4j.core.object.entity.Message.Flag.IS_COMPONENTS_V2)); assertTrue(data.flags().get().contains(discord4j.core.object.entity.Message.Flag.SUPPRESS_NOTIFICATIONS));
             assertFalse(json(data).has("embeds"));

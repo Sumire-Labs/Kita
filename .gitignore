@@ -11,4 +11,5 @@ presets/**
 !presets/.gitkeep
 docs/**
 !docs/architecture.md
+!docs/earthquakes.md
 AGENTS.md

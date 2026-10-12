@@ -72,8 +72,9 @@ public final class Kita implements AutoCloseable {
         if (music != null) music.installVoice(gateway);
         stay = new StayService(gateway, music); voiceXp = new VoiceXpListener(levels, gateway);
         features = new FeatureWiring(gateway, config, settings, tickets, music, stay, version,
-                new R2dbcLogShareRepository(database.source()), levels, voiceXp);
+                new R2dbcLogShareRepository(database.source()), levels, voiceXp, new R2dbcEarthquakeRepository(database.source()));
         CommandRegistration.register(gateway, features.commands(), config.bot().developmentGuildId()).block(Duration.ofMinutes(1));
+        features.start();
         presence.start(gateway); ticketRecovery = new TicketRecovery(tickets, gateway);
         if (music != null) refresh = new PlayerRefresh(music, gateway);
         healthPoll = Flux.interval(Duration.ZERO, Duration.ofSeconds(2)).concatMap(tick ->

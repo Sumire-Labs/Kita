@@ -20,6 +20,8 @@ public final class SettingsPanel {
         var container = base(userId, page);
         var prefix = "settings:" + userId + ":";
         switch (page) {
+            case "earthquake" -> container = com.sumirelabs.kita.earthquake.EarthquakeSettings.append(container, settings, userId, "general",
+                    "受信状態は地震・津波設定内の操作時に更新します。");
             case "levels" -> container = com.sumirelabs.kita.levels.LevelsSettings.append(container, settings, userId, "chat");
             case "logshare" -> container = com.sumirelabs.kita.logshare.LogShareSettings.append(container, prefix, settings);
             case "previews" -> {
@@ -53,7 +55,8 @@ public final class SettingsPanel {
                     + state(settings.enabled("translation.enabled")) + "\nTicket: "
                     + state(settings.enabled("ticket.enabled")) + "\nLogShare: "
                     + state(settings.enabled("logshare.enabled")) + "\nLevels: "
-                    + state(settings.enabled("levels.enabled")) + "\nカテゴリから設定を選択してください。"));
+                    + state(settings.enabled("levels.enabled")) + "\n地震・津波: "
+                    + state(settings.enabled("earthquake.enabled")) + "\nカテゴリから設定を選択してください。"));
         }
         return Ui.message(List.of(container));
     }
@@ -61,7 +64,8 @@ public final class SettingsPanel {
     public static Container base(long userId, String page) {
         var navigation = Choices.create("settings:" + userId + ":page");
         navigation.addOption("概要", "home").addOption("EmbedPlacer", "previews").addOption("FlagTL", "translation")
-                .addOption("Ticket", "ticket").addOption("LogShare", "logshare").addOption("Levels", "levels").setDefaultValues(page);
+                .addOption("Ticket", "ticket").addOption("LogShare", "logshare").addOption("Levels", "levels")
+                .addOption("地震・津波", "earthquake").setDefaultValues(page);
         return Container.of(TextDisplay.of("## Kita Settings\n設定はこのサーバーにだけ適用されます。"), ActionRow.of(navigation.build()));
     }
 
