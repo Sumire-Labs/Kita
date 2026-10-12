@@ -34,6 +34,17 @@ class P2pEarthquakeProviderTest {
             assertNotNull(provider.notices().next().block(Duration.ofSeconds(6))); assertEquals(1, sessions.get());
         } finally { server.disposeNow(); }
     }
+    @Test void historyFailuresAreBrieflySharedToAvoidExceedingTheProviderRateLimit() {
+        var requests = new AtomicInteger();
+        var server = HttpServer.create().host("127.0.0.1").port(0).route(routes -> routes.get("/v2/history", (request, response) -> {
+            requests.incrementAndGet(); return response.status(503).send();
+        })).bindNow();
+        try {
+            var provider = new P2pEarthquakeProvider("http://127.0.0.1:" + server.port() + "/v2");
+            Flux.range(0, 16).flatMap(index -> provider.latest().onErrorResume(error -> Mono.empty()), 16).then().block(Duration.ofSeconds(5));
+            assertEquals(1, requests.get());
+        } finally { server.disposeNow(); }
+    }
     @Test void reconnectBackfillsMissedBulletinsWithoutFetchingHistoryOnInitialConnection() {
         var sessions = new AtomicInteger(); var history = new AtomicInteger();
         var formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");

@@ -32,7 +32,7 @@ public final class P2pEarthquakeProvider implements EarthquakeProvider {
                 if (!rows.isArray() || rows.isEmpty()) throw new IllegalArgumentException("地震情報が見つかりません。");
                 return parser.parse(rows.get(0)).orElseThrow(() -> new IllegalArgumentException("地震情報を読み取れませんでした。"));
             }));
-        })).timeout(Duration.ofSeconds(25)).cache(value -> Duration.ofSeconds(30), error -> Duration.ZERO, () -> Duration.ZERO);
+        })).timeout(Duration.ofSeconds(25)).cache(value -> Duration.ofSeconds(30), error -> Duration.ofSeconds(5), () -> Duration.ZERO);
     }
     @Override public String name() { return "P2P地震情報（無料・EEW警報／地震／津波）"; }
     @Override public String status() { return connected.get() ? "受信接続中" : "接続準備／再接続中"; }
