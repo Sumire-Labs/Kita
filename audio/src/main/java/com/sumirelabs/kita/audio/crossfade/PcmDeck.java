@@ -16,10 +16,17 @@ final class PcmDeck implements AutoCloseable {
     final String token;
     final float[][] samples = new float[2][960];
     private final AudioPlayer player;
+    private final long lengthFrames;
     long frames;
     volatile String error = "";
     PcmDeck(AudioPlayerManager manager, AudioTrack track, String token) {
-        this.track = track; this.token = token; player = manager.createPlayer();
+        this(manager, track, token, 1000);
+    }
+    PcmDeck(AudioPlayerManager manager, AudioTrack track, String token, int bufferMillis) {
+        this.track = track; this.token = token;
+        lengthFrames = Math.multiplyExact(track.getInfo().length, 48);
+        player = manager.createPlayer();
+        player.setFrameBufferDuration(bufferMillis);
         player.addListener(new AudioEventAdapter() {
             @Override public void onTrackException(AudioPlayer source, AudioTrack failed, FriendlyException failure) { error = "音声を取得できませんでした。"; }
         });
@@ -36,6 +43,6 @@ final class PcmDeck implements AutoCloseable {
         frames += 960; return true;
     }
     boolean ended() { return player.getPlayingTrack() == null; }
-    long lengthFrames() { return track.getDuration() * 48; }
+    long lengthFrames() { return lengthFrames; }
     @Override public void close() { player.destroy(); }
 }

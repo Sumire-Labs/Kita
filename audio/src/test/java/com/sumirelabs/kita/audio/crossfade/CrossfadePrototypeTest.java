@@ -17,9 +17,18 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 class CrossfadePrototypeTest {
-    static final class Tone extends BaseAudioTrack {
+    static class Tone extends BaseAudioTrack {
         private final float frequency;
-        Tone(float frequency) { super(new AudioTrackInfo("tone", "test", 3000, "tone", false, null)); this.frequency = frequency; }
+        private final java.util.concurrent.CountDownLatch stalled;
+        private final int totalFrames;
+        Tone(float frequency) { this(frequency, null); }
+        Tone(float frequency, java.util.concurrent.CountDownLatch stalled) {
+            this(frequency, stalled, 150);
+        }
+        Tone(float frequency, java.util.concurrent.CountDownLatch stalled, int totalFrames) {
+            super(new AudioTrackInfo("tone", "test", 3000, "tone", false, null));
+            this.frequency = frequency; this.stalled = stalled; this.totalFrames = totalFrames;
+        }
         @Override public AudioSourceManager getSourceManager() { return null; }
         @Override protected AudioTrack makeShallowClone() { return new Tone(frequency); }
         @Override public void process(LocalAudioTrackExecutor executor) {
@@ -27,7 +36,8 @@ class CrossfadePrototypeTest {
             try {
                 executor.executeProcessingLoop(() -> {
                     var samples = new float[2][960];
-                    for (int frame = 0; frame < 150; frame++) {
+                    for (int frame = 0; frame < totalFrames; frame++) {
+                        if (frame == 25 && stalled != null) { stalled.countDown(); Thread.sleep(350); }
                         for (int index = 0; index < 960; index++) samples[0][index] = samples[1][index] = .25f * (float) Math.sin(2 * Math.PI * frequency * (frame * 960 + index) / 48000);
                         pipeline.process(samples, 0, 960);
                     }
@@ -36,18 +46,52 @@ class CrossfadePrototypeTest {
             } finally { pipeline.close(); }
         }
     }
+    @Test void aBriefUnderrunAfterOverlapStartsNeverDiscardsOrRewindsTheNextTrack() throws Exception {
+        var source = new CrossfadeSource(); var output = new DefaultAudioPlayerManager();
+        output.getConfiguration().setOutputFormat(StandardAudioDataFormats.DISCORD_PCM_S16_LE);
+        var player = output.createPlayer(); var stalled = new java.util.concurrent.CountDownLatch(1);
+        try {
+            var mixed = new CrossfadeTrack(source, new Tone(440), "test", "A", 1);
+            assertTrue(mixed.stream.prepare(new Tone(880, stalled), "B", "A"));
+            assertTrue(stalled.await(3, TimeUnit.SECONDS)); player.playTrack(mixed);
+            int frames = 0;
+            while (true) {
+                var frame = player.provide(5, TimeUnit.SECONDS);
+                if (frame == null || frame.isTerminator()) break;
+                frames++;
+            }
+            assertEquals(250, frames, 1, "A brief network stall must not abandon the already audible second track");
+            assertEquals("B", mixed.stream.audible(5000).token());
+        } finally { player.destroy(); output.shutdown(); source.shutdown(); }
+    }
     @Test void twoRealLavaplayerDecodersOverlapWithoutEncodingBetweenDecks() throws Exception {
         overlap(false);
     }
+    @Test void earlyEndOfAlreadyAudibleNextTrackStillCommitsItsQueueTransition() throws Exception {
+        var source = new CrossfadeSource(); var output = new DefaultAudioPlayerManager();
+        output.getConfiguration().setOutputFormat(StandardAudioDataFormats.DISCORD_PCM_S16_LE); var player = output.createPlayer();
+        try {
+            var mixed = new CrossfadeTrack(source, new Tone(440), "test", "A", 1);
+            assertTrue(mixed.stream.prepare(new Tone(880, null, 25), "B", "A")); player.playTrack(mixed);
+            while (player.provide(5, TimeUnit.SECONDS) != null) { }
+            assertTrue(mixed.stream.done()); assertEquals("B", mixed.stream.audible(mixed.getPosition()).token());
+            assertEquals(2500, mixed.getPosition(), 40);
+        } finally { player.destroy(); output.shutdown(); source.shutdown(); }
+    }
     @Test void mixedOutputPassesThroughHrirAsOneContinuousStream() throws Exception { overlap(true); }
+    @Test void sourceMetadataDrivesFadeWhenDecoderDurationIsUnknown() throws Exception { overlap(false, true); }
     private void overlap(boolean hrir) throws Exception {
+        overlap(hrir, false);
+    }
+    private void overlap(boolean hrir, boolean unknownDuration) throws Exception {
         var source = new CrossfadeSource(); var output = new DefaultAudioPlayerManager();
         output.getConfiguration().setOutputFormat(StandardAudioDataFormats.DISCORD_PCM_S16_LE);
         var player = output.createPlayer();
         if (hrir) player.setFilterFactory((track, format, sink) -> java.util.List.of(new com.sumirelabs.kita.audio.HrirFilter(
                 new com.sumirelabs.kita.audio.ConvolutionKernel(new float[][]{{.8f, .1f}, {0, 0}, {0, 0}, {.8f, .1f}}), sink)));
         try {
-            var mixed = new CrossfadeTrack(source, new Tone(440), "test", "A", 1);
+            Tone first = unknownDuration ? new Tone(440) { @Override public long getDuration() { return Long.MAX_VALUE; } } : new Tone(440);
+            var mixed = new CrossfadeTrack(source, first, "test", "A", 1);
             assertTrue(mixed.stream.prepare(new Tone(880), "B", "A"));
             player.playTrack(mixed); var samples = new ArrayList<Float>();
             while (true) {

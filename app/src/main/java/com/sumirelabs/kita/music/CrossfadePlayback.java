@@ -99,7 +99,10 @@ final class CrossfadePlayback implements AutoCloseable {
             session.crossfadeNext = next; session.crossfadeNextToken = token;
         }
         return api.request(guild, "/" + state.id(), "PUT", Map.of("token", token, "expected", state.token(), "encoded", next.getEncoded()))
-                .then().onErrorResume(error -> Mono.empty());
+                .then().onErrorResume(error -> {
+                    org.slf4j.LoggerFactory.getLogger(getClass()).warn("Crossfade preparation failed in guild {}: {}", guild, error.getClass().getSimpleName());
+                    return Mono.empty();
+                });
     }
     static void reset(MusicSession session) {
         session.crossfadeActive = false; session.crossfadeNext = null; session.crossfadeNextToken = ""; session.crossfadeState = null;
