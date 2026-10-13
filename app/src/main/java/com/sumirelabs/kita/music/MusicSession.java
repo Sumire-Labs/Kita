@@ -15,6 +15,13 @@ public final class MusicSession {
     boolean staying;
     String playbackId = "";
     String playbackError = "";
+    int crossfadeSeconds;
+    volatile boolean crossfadeActive;
+    String crossfadeToken = "";
+    String crossfadeNextToken = "";
+    dev.arbjerg.lavalink.client.player.Track crossfadeNext;
+    com.sumirelabs.kita.common.CrossfadeState crossfadeState;
+    int crossfadeFailures;
 
     record Panel(long channelId, long messageId) {}
     synchronized void stopped() { queue.clear(); if (!staying) voiceChannel = 0; }

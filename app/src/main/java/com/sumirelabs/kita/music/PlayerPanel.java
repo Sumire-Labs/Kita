@@ -22,11 +22,15 @@ public final class PlayerPanel {
     static MessageCreateSpec render(MusicSession session, LavalinkPlayer player, List<Preset> presets) {
         synchronized (session) {
             var track = session.queue.current();
-            long position = player == null ? 0 : player.getPosition();
+            long position = session.crossfadeActive && session.crossfadeState != null ? session.crossfadeState.position() : player == null ? 0 : player.getPosition();
             long length = track == null ? 0 : track.getInfo().getLength();
             int filled = length <= 0 ? 0 : Math.clamp(position * 20 / length, 0, 20);
             var status = track == null ? "待機中" : MusicTrackDisplay.title(track.getInfo().getTitle(), track.getInfo().getUri());
             if (!session.playbackError.isEmpty()) status = "⚠ 再生に失敗しました\n" + status;
+            if (session.crossfadeActive && session.crossfadeState != null && session.crossfadeState.fading() && session.crossfadeNext != null) {
+                var next = session.crossfadeNext.getInfo();
+                status += " → " + MusicTrackDisplay.title(next.getTitle(), next.getUri());
+            }
             String queue = session.queue.upcoming().stream().limit(5)
                     .map(t -> "• " + MusicTrackDisplay.queueTitle(t.getInfo().getTitle(), t.getInfo().getUri()))
                     .collect(java.util.stream.Collectors.joining("\n"));

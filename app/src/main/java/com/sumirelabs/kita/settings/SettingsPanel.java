@@ -20,6 +20,7 @@ public final class SettingsPanel {
         var container = base(userId, page);
         var prefix = "settings:" + userId + ":";
         switch (page) {
+            case "music" -> container = com.sumirelabs.kita.music.MusicSettings.append(container, settings, prefix);
             case "eventlog" -> container = com.sumirelabs.kita.eventlog.EventLogSettings.append(container, settings, userId, "home",
                     "参加・退出はMembers Intent、管理操作の詳細は監査ログ閲覧権限が必要です。");
             case "earthquake" -> container = com.sumirelabs.kita.earthquake.EarthquakeSettings.append(container, settings, userId, "general",
@@ -68,7 +69,7 @@ public final class SettingsPanel {
         var navigation = Choices.create("settings:" + userId + ":page");
         navigation.addOption("概要", "home").addOption("EmbedPlacer", "previews").addOption("FlagTL", "translation")
                 .addOption("Ticket", "ticket").addOption("LogShare", "logshare").addOption("Levels", "levels")
-                .addOption("EventLog", "eventlog").addOption("Seismo", "earthquake").setDefaultValues(page);
+                .addOption("EventLog", "eventlog").addOption("Seismo", "earthquake").addOption("Music", "music").setDefaultValues(page);
         return Container.of(TextDisplay.of("## Kita Settings\n設定はこのサーバーにだけ適用されます。"), ActionRow.of(navigation.build()));
     }
 

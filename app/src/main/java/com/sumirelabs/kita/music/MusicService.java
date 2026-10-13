@@ -19,13 +19,20 @@ public final class MusicService implements AutoCloseable {
     private final MusicLoader loader;
     private final MusicPlaybackEvents playbackEvents;
     private final MusicUpdates updates;
+    private final CrossfadePlayback crossfade;
     private VoiceConnections voice;
 
     public MusicService(long userId, String uri, String password, Path directory, String defaultPreset) throws Exception {
+        this(userId, uri, password, directory, defaultPreset, null);
+    }
+    public MusicService(long userId, String uri, String password, Path directory, String defaultPreset,
+                        com.sumirelabs.kita.settings.SettingsRepository settings) throws Exception {
         presets = new MusicPresets(PresetFiles.scan(directory), defaultPreset);
-        client = new LavalinkClient(userId); updates = new MusicUpdates(client); loader = new MusicLoader(client);
+        client = new LavalinkClient(userId); crossfade = new CrossfadePlayback(client, sessions, settings);
+        updates = new MusicUpdates(client, crossfade); loader = new MusicLoader(client);
         client.addNode(new NodeOptions.Builder().setName("main").setServerUri(uri).setPassword(password).build());
         playbackEvents = new MusicPlaybackEvents(client, sessions, updates::start);
+        crossfade.start(updates::start);
     }
     public LavalinkClient client() { return client; }
     public void installVoice(discord4j.core.GatewayDiscordClient gateway) { voice = new VoiceConnections(gateway, client); }
@@ -57,6 +64,9 @@ public final class MusicService implements AutoCloseable {
         return voiceOperation(guild, () -> actionNow(guild, action, value));
     }
     Mono<Void> actionNow(long guild, String action, long value) {
+        return crossfade.sync(guild, session(guild)).then(Mono.defer(() -> applyAction(guild, action, value)));
+    }
+    private Mono<Void> applyAction(long guild, String action, long value) {
         var session = session(guild); var snapshot = session.queue.snapshot();
         Mono<Void> request;
         switch (action) {
@@ -99,6 +109,7 @@ public final class MusicService implements AutoCloseable {
             synchronized (session) {
                 session.staying = false; session.voiceChannel = 0;
                 session.queue.clear(); session.playbackId = ""; session.playbackError = "";
+                CrossfadePlayback.reset(session);
             }
             var link = client.getLinkIfCached(guild);
             return link == null ? Mono.empty() : link.destroy().timeout(java.time.Duration.ofSeconds(20)).then();
@@ -106,7 +117,7 @@ public final class MusicService implements AutoCloseable {
     }
     public Map<Long, MusicSession> sessions() { return Map.copyOf(sessions); }
     @Override public void close() {
-        playbackEvents.close(); if (voice != null) voice.close();
+        crossfade.close(); playbackEvents.close(); if (voice != null) voice.close();
         sessions.values().forEach(session -> session.operations.close()); client.close();
     }
 }

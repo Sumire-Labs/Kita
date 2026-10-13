@@ -26,7 +26,10 @@ public final class SettingsListener {
         }
         var changes = new HashMap<String, String>(); String page;
         if (action.equals("page")) page = values.getFirst();
-        else if (action.equals("platforms")) {
+        else if (action.equals("music.crossfade")) {
+            if (!values.getFirst().matches("[0-9]|1[0-2]")) return Mono.empty();
+            changes.put(action, values.getFirst()); page = "music";
+        } else if (action.equals("platforms")) {
             page = "previews";
             for (String platform : SettingsPanel.PLATFORMS) changes.put("previews." + platform, String.valueOf(values.contains(platform)));
         } else if (Set.of("previews.enabled", "translation.enabled", "ticket.enabled", "logshare.enabled", "logshare.auto").contains(action)) {

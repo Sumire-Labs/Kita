@@ -33,6 +33,7 @@ final class MusicPlaybackEvents implements AutoCloseable {
     private Mono<Void> handle(EmittedEvent event, MusicSession session, Starter starter) {
         switch (event) {
             case TrackEndEvent end -> {
+                if (session.crossfadeActive) return Mono.empty();
                 boolean advance;
                 synchronized (session) {
                     if (!matches(session, end.getTrack())) return Mono.empty();

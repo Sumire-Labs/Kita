@@ -61,7 +61,7 @@ public final class Kita implements AutoCloseable {
         var tickets = new R2dbcTicketRepository(database.source());
         levels = new LevelsService(settings, new R2dbcLevelsRepository(database.source()));
         if (config.music().enabled()) music = new MusicService(Helpers.getUserIdFromToken(config.bot().token()),
-                config.music().uri(), config.music().password(), Path.of(config.music().presetsDirectory()), config.music().defaultPreset());
+                config.music().uri(), config.music().password(), Path.of(config.music().presetsDirectory()), config.music().defaultPreset(), settings);
         var initial = ReactiveWork.io(presence::current).block(Duration.ofSeconds(20));
         var discord = DiscordClient.create(config.bot().token());
         var intents = GatewayPolicy.intents(discord).block(Duration.ofSeconds(20));
