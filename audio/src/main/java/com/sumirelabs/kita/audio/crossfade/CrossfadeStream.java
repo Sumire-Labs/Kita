@@ -72,5 +72,6 @@ final class CrossfadeStream implements AutoCloseable {
     }
     synchronized boolean done() { return done; }
     synchronized String error() { return error; }
+    synchronized boolean closed() { return closed; }
     @Override public synchronized void close() { closed = true; current.close(); if (pending != null) pending.close(); }
 }

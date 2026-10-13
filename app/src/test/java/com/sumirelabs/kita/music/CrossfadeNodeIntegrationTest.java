@@ -17,7 +17,8 @@ class CrossfadeNodeIntegrationTest {
         try (var client = new LavalinkClient(123456789123456789L)) {
             var node = client.addNode(new NodeOptions.Builder().setName("prototype")
                     .setServerUri(System.getenv("KITA_TEST_CROSSFADE_NODE")).setPassword("crossfade-integration-only").build());
-            Mono.defer(() -> node.getAvailable() ? Mono.just(true) : Mono.empty()).repeatWhenEmpty(50, repeats -> repeats.delayElements(Duration.ofMillis(100)))
+            Mono.defer(() -> node.getAvailable() && node.getSessionId() != null ? Mono.just(true) : Mono.empty())
+                    .repeatWhenEmpty(50, repeats -> repeats.delayElements(Duration.ofMillis(100)))
                     .block(Duration.ofSeconds(10));
             var link = client.getOrCreateLink(7);
             link.createOrUpdatePlayer().setVolume(10).block(Duration.ofSeconds(5));
@@ -36,6 +37,10 @@ class CrossfadeNodeIntegrationTest {
             api.request(7, "", "POST", Map.of("id", "integration-C", "encoded", first.getEncoded(), "seconds", 1)).block();
             link.createOrUpdatePlayer().setTrack(first.makeClone()).block();
             assertThrows(IllegalStateException.class, () -> api.request(7, "/integration-C", "GET", null).block());
+            reactor.core.publisher.Flux.range(0, 20).concatMap(index -> Mono.when(
+                    api.request(7, "", "POST", Map.of("id", "race-" + index, "encoded", first.getEncoded(), "seconds", 1))
+                            .onErrorResume(error -> Mono.empty()).then(),
+                    link.createOrUpdatePlayer().setTrack(first.makeClone()).then())).then().block(Duration.ofSeconds(20));
             link.destroy().block();
         }
     }

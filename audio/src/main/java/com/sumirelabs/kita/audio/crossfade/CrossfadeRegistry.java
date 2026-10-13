@@ -18,7 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 public final class CrossfadeRegistry extends PluginEventHandler {
     private record Key(String session, long guild) {}
     private record Entry(String id, IPlayer player, CrossfadeTrack track) {}
-    private final Map<Key, Entry> entries = new HashMap<>();
+    private final Map<Key, Entry> entries = new java.util.concurrent.ConcurrentHashMap<>();
     private final AudioPlayerManager manager;
     private final CrossfadeSource source;
     private final Map<String, ISocketContext> contexts = new HashMap<>();
@@ -40,7 +40,11 @@ public final class CrossfadeRegistry extends PluginEventHandler {
         try { player.play(mixed); }
         catch (RuntimeException failure) { mixed.stream.close(); throw failure; }
         if (old != null) old.track.stream.close();
-        entries.put(key, new Entry(id, player, mixed)); return status(session, guild, id);
+        var entry = new Entry(id, player, mixed); entries.put(key, entry);
+        if (player.getTrack() != mixed || mixed.stream.closed()) {
+            entries.remove(key, entry); mixed.stream.close(); throw new ResponseStatusException(HttpStatus.CONFLICT, "Playback was replaced");
+        }
+        return status(session, guild, id);
     }
     public synchronized CrossfadeState status(String session, long guild, String id) {
         var entry = entry(session, guild, id); long timeline = entry.track.getPosition();
@@ -88,10 +92,10 @@ public final class CrossfadeRegistry extends PluginEventHandler {
                                              com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason reason) {
                 if (reason != com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason.REPLACED
                         && reason != com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason.STOPPED) return;
-                synchronized (CrossfadeRegistry.this) {
-                    var key = new Key(context.getSessionId(), player.getGuildId()); var entry = entries.get(key);
-                    if (entry != null && entry.track == track) { entries.remove(key); entry.track.stream.close(); }
-                }
+                // Lavaplayer can invoke this while holding its track lock. Never acquire the registry monitor here.
+                if (track instanceof CrossfadeTrack mixed) mixed.stream.close();
+                var key = new Key(context.getSessionId(), player.getGuildId()); var entry = entries.get(key);
+                if (entry != null && entry.track == track) entries.remove(key, entry);
             }
         });
     }
