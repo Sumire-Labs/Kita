@@ -10,6 +10,7 @@ distributions {
             from(rootProject.file('LICENSE.md'))
             from(rootProject.file('docs/distribution.md')) { into 'docs' }
             from(rootProject.file('docs/earthquakes.md')) { into 'docs' }
+            from(rootProject.file('docs/eventlog.md')) { into 'docs' }
             from(rootProject.file('config/kita.example.yml')) { into 'config' }
         }
     }

@@ -66,7 +66,7 @@ public final class EarthquakeSettingsListener {
         if (parts[2].equals("toggle")) return update(context, "general", old -> Map.of("earthquake.enabled",
                 String.valueOf(!old.enabled("earthquake.enabled"))), Mono.empty());
         if (parts[2].equals("preview")) return context.defer(true).then(authorize(context)).then(context.followup(EarthquakeMessages.preview(), true))
-                .onErrorResume(error -> context.followup(Ui.text("地震・津波", errorMessage(error)), true));
+                .onErrorResume(error -> context.followup(Ui.text("Seismo", errorMessage(error)), true));
         if (!parts[2].equals("regions")) return Mono.empty();
         return authorize(context).then(repository.get(context.guildId())).flatMap(settings -> event.presentModal(Forms.modal(
                 "earthquake-regions:" + context.userId(), "対象地域のキーワード",
@@ -74,7 +74,7 @@ public final class EarthquakeSettingsListener {
                         .prefilled(settings.value("earthquake.regions", "")).placeholder("例：東京都,千葉県,北海道")),
                 Label.of("津波予報区（空欄で全国、カンマ区切り）", TextInput.paragraph("tsunamiRegions", 0, 500).required(false)
                         .prefilled(settings.value("earthquake.tsunamiRegions", "")).placeholder("例：千葉県,伊豆諸島")))))
-                .onErrorResume(error -> context.privateReply(Ui.text("地震・津波", errorMessage(error))));
+                .onErrorResume(error -> context.privateReply(Ui.text("Seismo", errorMessage(error))));
     }
     public Mono<Void> modal(ModalSubmitInteractionEvent event) {
         if (!event.getCustomId().startsWith("earthquake-regions:")) return Mono.empty();
@@ -83,12 +83,12 @@ public final class EarthquakeSettingsListener {
         return context.defer(true).then(authorize(context)).then(Mono.defer(() -> repository.update(context.guildId(), Map.of(
                 "earthquake.regions", clean(optional(event, "regions")), "earthquake.tsunamiRegions", clean(optional(event, "tsunamiRegions"))))))
                 .flatMap(updated -> context.followup(EarthquakeSettings.render(updated, context.userId(), "filters", provider.status()), true))
-                .onErrorResume(error -> context.followup(Ui.text("地震・津波", errorMessage(error)), true));
+                .onErrorResume(error -> context.followup(Ui.text("Seismo", errorMessage(error)), true));
     }
     private Mono<Void> update(InteractionContext context, String page, Function<GuildSettings, Map<String, String>> changes, Mono<Void> validation) {
         return context.deferEdit().then(authorize(context)).then(validation).then(repository.modify(context.guildId(), changes))
                 .flatMap(updated -> context.edit(EarthquakeSettings.render(updated, context.userId(), page, provider.status())))
-                .onErrorResume(error -> context.followup(Ui.text("地震・津波", errorMessage(error)), true));
+                .onErrorResume(error -> context.followup(Ui.text("Seismo", errorMessage(error)), true));
     }
     private static Mono<Void> authorize(InteractionContext context) {
         return context.member().flatMap(member -> Access.require(member, Permission.MANAGE_GUILD));
@@ -105,6 +105,6 @@ public final class EarthquakeSettingsListener {
     private static boolean owner(InteractionContext context, String[] parts) {
         return context.event().getInteraction().getGuildId().isPresent() && parts.length >= 2 && context.owner(parts[1]);
     }
-    private static Mono<Void> denied(InteractionContext context) { return context.privateReply(Ui.text("地震・津波", "この設定を操作する権限がありません。")); }
+    private static Mono<Void> denied(InteractionContext context) { return context.privateReply(Ui.text("Seismo", "この設定を操作する権限がありません。")); }
     private static String errorMessage(Throwable error) { return error instanceof IllegalArgumentException ? error.getMessage() : "設定を保存できませんでした。権限と接続を確認してください。"; }
 }

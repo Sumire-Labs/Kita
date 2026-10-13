@@ -9,7 +9,7 @@ Java 25 / Discord4J / MariaDB (R2DBC) / Lavalinkで構成する、複数の物�
 3. HRIRのWAVを`presets/`へ配置。サブフォルダも使用できます。
 4. Ubuntuでは`sudo chown -R 10001:10001 data`で保存先の書き込み権限を設定。
 5. `docker compose up -d --build`で起動。
-6. `/settings`で機能を有効化。初期状態ではプレビュー・翻訳・チケット・LogShare・Levels・地震通知は無効です。
+6. `/settings`で機能を有効化。初期状態ではプレビュー・翻訳・チケット・LogShare・Levels・EventLog・Seismoは無効です。
 
 Discord Developer Portalで**Message Content Intent**を有効にしてください。
 招待スコープは`bot`と`applications.commands`を使用します。
@@ -23,7 +23,7 @@ Discord Developer Portalで**Message Content Intent**を有効にしてくださ
 | `/avatar user: server:` | ユーザーまたはサーバーアバター |
 | `/fastfetch` | JVM・OS・CPU・稼働時間 |
 | `/settings` | サーバー別の設定パネル |
-| `/quake` | 直近の観測地震情報（P2P地震情報） |
+| `/quake` | Seismo：直近の観測地震情報（P2P地震情報） |
 | `/ticket` | 問い合わせ受付 |
 | `/play query:` | URL・検索・公開プレイリスト |
 | `/stop` `/skip` | 停止・次の曲 |
@@ -63,6 +63,17 @@ XP・順位・Chatのクールダウン・報酬の付与記録はサーバー�
 報酬編集にはサーバー管理・ロール管理権限が必要です。Botより下で、編集者が操作できる通常のロールを選択します。
 設定変更は次のXP獲得やプロフィール表示時に反映します。削除するのはBotが付与した報酬ロールだけです。
 初期の通知は報酬獲得時だけのサイレント通知です。固定通知先を省略するとChatの投稿先を使い、VCでは通知しません。
+
+## EventLog / Seismo
+
+`/settings` → EventLogで出力先を選び、有効にするとサーバーの操作をComponents V2で記録します。
+メッセージの編集・削除、参加・退出、管理操作、VC、ロール、チャンネル、サーバー設定を個別に選べます。
+本文はMariaDBに初期値6時間保存し、Bot・Webhookは初期状態で除外します。
+共通・カテゴリ別の出力先、除外チャンネル・カテゴリ・ユーザー、保存容量と期間を設定できます。
+詳細と必要な権限は[EventLog](docs/eventlog.md)を参照してください。
+
+地震・津波通知の表示名はSeismoです。既存の設定と`/quake`は引き続き利用できます。
+通知条件・取得元は[Seismoの運用](docs/earthquakes.md)を参照してください。
 
 ## License
 

@@ -12,4 +12,5 @@ presets/**
 docs/**
 !docs/architecture.md
 !docs/earthquakes.md
+!docs/eventlog.md
 AGENTS.md

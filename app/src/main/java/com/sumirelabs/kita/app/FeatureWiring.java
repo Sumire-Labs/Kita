@@ -11,6 +11,7 @@ import com.sumirelabs.kita.stay.*;
 import com.sumirelabs.kita.tickets.*;
 import com.sumirelabs.kita.translation.*;
 import com.sumirelabs.kita.earthquake.*;
+import com.sumirelabs.kita.eventlog.*;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.event.domain.VoiceStateUpdateEvent;
 import discord4j.core.event.domain.guild.GuildDeleteEvent;
@@ -30,9 +31,11 @@ public final class FeatureWiring implements AutoCloseable {
     private final Disposable.Composite subscriptions = Disposables.composite();
     private final List<Command> commands;
     private final EarthquakeService earthquakes;
+    private final EventLogWiring eventlog;
     public FeatureWiring(GatewayDiscordClient client, KitaConfig config, SettingsRepository settings, TicketRepository tickets,
                          MusicService music, StayService stay, String version, LogShareRepository logs, LevelsService levels, VoiceXpListener voiceXp,
-                         EarthquakeRepository earthquakeRepository) {
+                         EarthquakeRepository earthquakeRepository, EventLogRepository eventLogRepository) {
+        eventlog = new EventLogWiring(client, settings, eventLogRepository);
         var feed = new P2pEarthquakeProvider();
         earthquakes = new EarthquakeService(client, settings, earthquakeRepository, feed);
         var earthquakeSettings = new EarthquakeSettingsListener(settings, feed);
@@ -91,6 +94,6 @@ public final class FeatureWiring implements AutoCloseable {
         subscriptions.add(Events.listen(client, MessageCreateEvent.class, router::prefix));
     }
     public List<Command> commands() { return commands; }
-    public void start() { earthquakes.start(); }
-    @Override public void close() { earthquakes.close(); subscriptions.dispose(); }
+    public void start() { earthquakes.start(); eventlog.start(); }
+    @Override public void close() { eventlog.close(); earthquakes.close(); subscriptions.dispose(); }
 }

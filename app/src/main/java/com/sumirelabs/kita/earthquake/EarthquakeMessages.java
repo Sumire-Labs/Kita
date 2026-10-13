@@ -16,7 +16,7 @@ public final class EarthquakeMessages {
     private EarthquakeMessages() {}
     public static MessageCreateSpec render(EarthquakeNotice notice, boolean silent, long role) {
         var lines = new ArrayList<String>();
-        lines.add("## " + (notice.cancelled() ? "ℹ️ " : notice.kind() == EarthquakeNotice.Kind.EARTHQUAKE ? "🌏 " : "⚠️ ") + Ui.escape(notice.title()));
+        lines.add("## Seismo · " + (notice.cancelled() ? "ℹ️ " : notice.kind() == EarthquakeNotice.Kind.EARTHQUAKE ? "🌏 " : "⚠️ ") + Ui.escape(notice.title()));
         if (role != 0) lines.add("<@&" + role + ">");
         lines.add("発表：<t:" + notice.issuedMs() / 1000 + ":F>");
         if (notice.kind() == EarthquakeNotice.Kind.EEW_WARNING || notice.kind() == EarthquakeNotice.Kind.EEW_FORECAST) lines.add("第" + notice.revision() + "報");
@@ -49,7 +49,7 @@ public final class EarthquakeMessages {
                 ? List.of(Message.Flag.IS_COMPONENTS_V2, Message.Flag.SUPPRESS_NOTIFICATIONS) : List.of(Message.Flag.IS_COMPONENTS_V2));
     }
     public static MessageCreateSpec preview() {
-        return Ui.text("【通知テスト】地震・津波通知", "これは表示確認用のサンプルです。実際の地震情報ではありません。\n"
+        return Ui.text("【通知テスト】Seismo", "これは表示確認用のサンプルです。実際の地震情報ではありません。\n"
                 + "緊急地震速報（警報）・観測地震情報・津波情報をこの形式で表示します。");
     }
 }

@@ -22,7 +22,7 @@ public final class EarthquakeSettings {
         var config = EarthquakeConfig.from(settings); String prefix = "earthquake-settings:" + owner + ":";
         var navigation = Choices.create(prefix + "page").addOption("受信・通知先", "general").addOption("地域・観測震度", "filters")
                 .addOption("通知音・メンション・続報", "delivery").setDefaultValues(page).build();
-        var container = Ui.append(base, TextDisplay.of("### 地震・津波通知\n取得元：P2P地震情報\n" + status
+        var container = Ui.append(base, TextDisplay.of("### Seismo\n取得元：P2P地震情報\n" + status
                         + "\nEEW警報・観測地震情報・津波情報に対応。EEW予報は現在未対応です。"),
                 ActionRow.of(navigation), ActionRow.of(Button.primary(prefix + "toggle", "通知：" + (config.enabled() ? "有効" : "無効"))));
         if (page.equals("filters")) {

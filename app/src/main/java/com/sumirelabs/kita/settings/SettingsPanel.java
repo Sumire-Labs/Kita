@@ -20,6 +20,8 @@ public final class SettingsPanel {
         var container = base(userId, page);
         var prefix = "settings:" + userId + ":";
         switch (page) {
+            case "eventlog" -> container = com.sumirelabs.kita.eventlog.EventLogSettings.append(container, settings, userId, "home",
+                    "参加・退出はMembers Intent、管理操作の詳細は監査ログ閲覧権限が必要です。");
             case "earthquake" -> container = com.sumirelabs.kita.earthquake.EarthquakeSettings.append(container, settings, userId, "general",
                     "受信状態は地震・津波設定内の操作時に更新します。");
             case "levels" -> container = com.sumirelabs.kita.levels.LevelsSettings.append(container, settings, userId, "chat");
@@ -55,7 +57,8 @@ public final class SettingsPanel {
                     + state(settings.enabled("translation.enabled")) + "\nTicket: "
                     + state(settings.enabled("ticket.enabled")) + "\nLogShare: "
                     + state(settings.enabled("logshare.enabled")) + "\nLevels: "
-                    + state(settings.enabled("levels.enabled")) + "\n地震・津波: "
+                    + state(settings.enabled("levels.enabled")) + "\nEventLog: "
+                    + state(settings.enabled("eventlog.enabled")) + "\nSeismo: "
                     + state(settings.enabled("earthquake.enabled")) + "\nカテゴリから設定を選択してください。"));
         }
         return Ui.message(List.of(container));
@@ -65,7 +68,7 @@ public final class SettingsPanel {
         var navigation = Choices.create("settings:" + userId + ":page");
         navigation.addOption("概要", "home").addOption("EmbedPlacer", "previews").addOption("FlagTL", "translation")
                 .addOption("Ticket", "ticket").addOption("LogShare", "logshare").addOption("Levels", "levels")
-                .addOption("地震・津波", "earthquake").setDefaultValues(page);
+                .addOption("EventLog", "eventlog").addOption("Seismo", "earthquake").setDefaultValues(page);
         return Container.of(TextDisplay.of("## Kita Settings\n設定はこのサーバーにだけ適用されます。"), ActionRow.of(navigation.build()));
     }
 

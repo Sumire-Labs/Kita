@@ -63,16 +63,18 @@ public final class Kita implements AutoCloseable {
         if (config.music().enabled()) music = new MusicService(Helpers.getUserIdFromToken(config.bot().token()),
                 config.music().uri(), config.music().password(), Path.of(config.music().presetsDirectory()), config.music().defaultPreset());
         var initial = ReactiveWork.io(presence::current).block(Duration.ofSeconds(20));
-        gateway = DiscordClient.create(config.bot().token()).gateway()
-                .setEnabledIntents(IntentSet.of(Intent.GUILDS, Intent.GUILD_MESSAGES, Intent.MESSAGE_CONTENT,
-                        Intent.GUILD_MESSAGE_REACTIONS, Intent.GUILD_VOICE_STATES))
+        var discord = DiscordClient.create(config.bot().token());
+        var intents = GatewayPolicy.intents(discord).block(Duration.ofSeconds(20));
+        gateway = discord.gateway().setEnabledIntents(intents).setStore(GatewayPolicy.store())
+                .setMemberRequestFilter(discord4j.core.shard.MemberRequestFilter.none())
                 .setSharding(config.bot().shards() == 0 ? ShardingStrategy.recommended() : ShardingStrategy.fixed(config.bot().shards()))
                 .setInitialPresence(shard -> ClientPresence.online(initial)).login().block(Duration.ofMinutes(3));
         if (gateway == null) throw new IllegalStateException("Discord login did not complete");
         if (music != null) music.installVoice(gateway);
         stay = new StayService(gateway, music); voiceXp = new VoiceXpListener(levels, gateway);
         features = new FeatureWiring(gateway, config, settings, tickets, music, stay, version,
-                new R2dbcLogShareRepository(database.source()), levels, voiceXp, new R2dbcEarthquakeRepository(database.source()));
+                new R2dbcLogShareRepository(database.source()), levels, voiceXp, new R2dbcEarthquakeRepository(database.source()),
+                new R2dbcEventLogRepository(database.source()));
         CommandRegistration.register(gateway, features.commands(), config.bot().developmentGuildId()).block(Duration.ofMinutes(1));
         features.start();
         presence.start(gateway); ticketRecovery = new TicketRecovery(tickets, gateway);
