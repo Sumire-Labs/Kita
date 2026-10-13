@@ -15,6 +15,8 @@ public final class CrossfadeSource implements AudioSourceManager {
         pcm.getConfiguration().setOutputFormat(StandardAudioDataFormats.DISCORD_PCM_S16_LE);
         pcm.getConfiguration().setResamplingQuality(com.sedmelluq.discord.lavaplayer.player.AudioConfiguration.ResamplingQuality.HIGH);
         pcm.setTrackStuckThreshold(60_000);
+        // Decks can be intentionally idle during a long pause. Their owning stream closes them explicitly.
+        pcm.setPlayerCleanupThreshold(Long.MAX_VALUE);
         pcm.setFrameBufferDuration(1000);
         ((java.util.concurrent.ThreadPoolExecutor) pcm.getExecutor()).setMaximumPoolSize(64);
     }
