@@ -1,6 +1,6 @@
 package com.sumirelabs.kita.tickets;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,7 +10,7 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 
 public final class TicketTranscript {
     private final Path root;
-    private final ObjectMapper json = new ObjectMapper();
+    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
     public TicketTranscript(Path root) { this.root = root.toAbsolutePath().normalize(); }
 
     public Path save(TextChannel channel) throws Exception {

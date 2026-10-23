@@ -1,12 +1,12 @@
 package com.sumirelabs.kita.previews;
 
 import static org.junit.jupiter.api.Assertions.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import java.net.URI;
 import org.junit.jupiter.api.Test;
 
 class YtDlpProviderTest {
-    private final ObjectMapper json = new ObjectMapper();
+    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
     private final SocialLink link = new SocialLink("youtube", URI.create("https://youtu.be/example"));
     @Test void selectsPlayableCombinedVideoOverThumbnail() throws Exception {
         var data = json.readTree("""

@@ -9,7 +9,7 @@ dependencies {
     compileOnly 'dev.arbjerg.lavalink:plugin-api:4.2.2'
     implementation project(':common')
     implementation 'com.github.wendykierp:JTransforms:3.2'
-    implementation 'com.github.ben-manes.caffeine:caffeine:3.3.0'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.3.1'
     testImplementation 'dev.arbjerg.lavalink:plugin-api:4.2.2'
 }
 tokenEnvoy {

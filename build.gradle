@@ -1,11 +1,11 @@
 plugins {
     id 'base'
-    id 'com.cleanroommc.versioning' version '3.3.0'
+    id 'com.cleanroommc.versioning' version '3.4.0'
     id 'com.cleanroommc.tokenenvoy' version '3.0.0' apply false
 }
 ext {
     jdaVersion = '6.7.0'
-    jacksonVersion = '2.22.3'
+    jacksonVersion = '3.2.4'
 }
 subprojects {
     apply plugin: 'java-library'

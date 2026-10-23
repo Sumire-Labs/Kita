@@ -2,12 +2,12 @@ package com.sumirelabs.kita.previews;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static com.sumirelabs.kita.previews.Engagement.Metric.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 
 class EngagementParserTest {
-    private final ObjectMapper json = new ObjectMapper();
+    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
 
     @Test void twitterKeepsRealZeroSeparateFromUnavailableCounts() throws Exception {
         var counts = EngagementParser.twitter(json.readTree("""

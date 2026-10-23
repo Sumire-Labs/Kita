@@ -1,12 +1,12 @@
 package com.sumirelabs.kita.music;
 
 import static org.junit.jupiter.api.Assertions.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import java.util.ArrayList;
 import org.junit.jupiter.api.Test;
 
 class PublicMusicResolverTest {
-    private final ObjectMapper json = new ObjectMapper();
+    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
     @Test void spotifyResolvesMetadataWithoutCredentials() throws Exception {
         var data = json.readTree("""
                 {"props":{"pageProps":{"state":{"data":{"entity":{"type":"track",

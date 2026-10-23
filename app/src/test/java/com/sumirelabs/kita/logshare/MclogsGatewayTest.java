@@ -1,7 +1,7 @@
 package com.sumirelabs.kita.logshare;
 
 import static org.junit.jupiter.api.Assertions.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.sun.net.httpserver.HttpServer;
 import gs.mclo.api.Instance;
 import gs.mclo.api.MclogsClient;
@@ -24,7 +24,7 @@ class MclogsGatewayTest {
             server.createContext("/1/log/", exchange -> {
                 assertTrue(exchange.getRequestURI().getQuery().contains("raw"));
                 String json = missingLog ? "{\"success\":false,\"error\":\"Log not found\"}"
-                        : new ObjectMapper().writeValueAsString(java.util.Map.of("id", "abc123", "content", java.util.Map.of("raw", "日本語のログ\n[hidden]")));
+                        : JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(java.util.Map.of("id", "abc123", "content", java.util.Map.of("raw", "日本語のログ\n[hidden]")));
                 byte[] body = json.getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(missingLog ? 404 : 200, body.length); exchange.getResponseBody().write(body); exchange.close();
             });
@@ -44,8 +44,8 @@ class MclogsGatewayTest {
                 assertNull(exchange.getRequestHeaders().getFirst("Authorization"));
                 assertTrue(exchange.getRequestHeaders().getFirst("User-Agent").startsWith("Kita/"));
                 try (var gzip = new GZIPInputStream(exchange.getRequestBody())) {
-                    var json = new ObjectMapper().readTree(gzip.readAllBytes());
-                    assertEquals("Kita", json.path("source").asText()); content.set(json.path("content").asText());
+                    var json = JsonMapper.builderWithJackson2Defaults().build().readTree(gzip.readAllBytes());
+                    assertEquals("Kita", json.path("source").asString()); content.set(json.path("content").asString());
                 }
                 byte[] body = "{\"success\":true,\"id\":\"abc123\",\"url\":\"https://mclo.gs/abc123\"}".getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, body.length); exchange.getResponseBody().write(body); exchange.close();

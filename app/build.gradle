@@ -19,22 +19,25 @@ dependencies {
         // Lavalink handles audio; JDA's Opus backend brings an incompatible legacy JNA.
         exclude group: 'club.minnced', module: 'opus-java'
     }
-    implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
-    implementation "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:${jacksonVersion}"
+    implementation "tools.jackson.core:jackson-databind:${jacksonVersion}"
+    implementation "tools.jackson.dataformat:jackson-dataformat-yaml:${jacksonVersion}"
+    // lavalink-client exposes Jackson 2 JsonNode in its public track user-data API.
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.4'
     implementation 'org.slf4j:slf4j-api:2.0.20'
     implementation 'com.zaxxer:HikariCP:7.1.0'
-    implementation 'org.mariadb.jdbc:mariadb-java-client:3.5.10'
-    implementation 'org.flywaydb:flyway-core:13.10.0'
-    implementation 'org.flywaydb:flyway-mysql:13.10.0'
-    implementation 'com.github.oshi:oshi-core:7.7.0'
+    // Connector/J 4 defaults to verify-full TLS; keep 3.5 for existing JDBC URLs.
+    implementation 'org.mariadb.jdbc:mariadb-java-client:3.5.11'
+    implementation 'org.flywaydb:flyway-core:13.11.1'
+    implementation 'org.flywaydb:flyway-mysql:13.11.1'
+    implementation 'com.github.oshi:oshi-core:7.7.2'
     implementation 'com.deepl.api:deepl-java:1.17.0'
-    implementation 'com.github.ben-manes.caffeine:caffeine:3.3.0'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.3.1'
     implementation 'dev.arbjerg:lavalink-client:3.4.0'
     implementation 'org.jsoup:jsoup:1.23.2'
     implementation 'gs.mclo:api:6.2.1'
-    implementation 'io.github.humbleui:skija-shared:0.143.17'
-    runtimeOnly 'io.github.humbleui:skija-windows-x64:0.143.17'
-    runtimeOnly 'io.github.humbleui:skija-linux-x64:0.143.17'
+    implementation 'io.github.humbleui:skija-shared:0.143.18'
+    runtimeOnly 'io.github.humbleui:skija-windows-x64:0.143.18'
+    runtimeOnly 'io.github.humbleui:skija-linux-x64:0.143.18'
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.20'
 }
 tokenEnvoy {

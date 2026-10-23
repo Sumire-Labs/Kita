@@ -43,4 +43,11 @@ class LevelRulesTest {
         assertThrows(IllegalArgumentException.class, () -> new LevelReward(0, 1));
         assertThrows(IllegalArgumentException.class, () -> LevelSettingsModals.integer("0", 1, 10000));
     }
+    @Test void storedJacksonTwoRewardsRemainReadableWithoutChangingTheirShape() {
+        var stored = "[{\"level\":5,\"roleId\":123456789012345678}]";
+        var settings = new GuildSettings(1, Map.of("levels.rewards", stored));
+        var rewards = LevelReward.read(settings);
+        assertEquals(List.of(new LevelReward(5, 123456789012345678L)), rewards);
+        assertEquals(stored, LevelReward.write(rewards));
+    }
 }

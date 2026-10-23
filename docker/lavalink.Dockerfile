@@ -5,13 +5,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 COPY . .
 RUN bash ./gradlew :audio:shadowJar --no-daemon
 
-FROM denoland/deno:bin-2.9.7 AS javascript
+FROM denoland/deno:bin-2.9.8 AS javascript
 
 FROM eclipse-temurin:25-jre-noble
 ARG LAVALINK_VERSION=4.2.2
 RUN apt-get update && apt-get install -y --no-install-recommends curl ffmpeg python3 python3-venv \
     && python3 -m venv /opt/yt-dlp \
-    && /opt/yt-dlp/bin/pip install --no-cache-dir yt-dlp==2026.8.19 yt-dlp-ejs==0.8.0 \
+    && /opt/yt-dlp/bin/pip install --no-cache-dir yt-dlp==2026.10.21 yt-dlp-ejs==0.8.0 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 kita && useradd --uid 10001 --gid kita --create-home kita
 WORKDIR /opt/lavalink

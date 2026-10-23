@@ -1,7 +1,7 @@
 package com.sumirelabs.kita.app;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.dataformat.yaml.YAMLMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -13,7 +13,10 @@ public final class ConfigLoader {
 
     public static KitaConfig load(Path path) throws Exception {
         // Substitute after YAML parsing so punctuation/newlines in secrets cannot alter the structure.
-        var mapper = new ObjectMapper(new YAMLFactory());
+        var mapper = YAMLMapper.builder()
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+                .build();
         var tree = mapper.readTree(Files.readString(path));
         expand(tree, System.getenv());
         var config = mapper.treeToValue(tree, KitaConfig.class);
@@ -31,16 +34,16 @@ public final class ConfigLoader {
         });
     }
 
-    private static void expand(com.fasterxml.jackson.databind.JsonNode node, Map<String, String> environment) {
-        if (node instanceof com.fasterxml.jackson.databind.node.ObjectNode object) {
+    private static void expand(tools.jackson.databind.JsonNode node, Map<String, String> environment) {
+        if (node instanceof tools.jackson.databind.node.ObjectNode object) {
             object.properties().forEach(entry -> {
-                if (entry.getValue().isTextual()) object.put(entry.getKey(), substitute(entry.getValue().asText(), environment));
+                if (entry.getValue().isString()) object.put(entry.getKey(), substitute(entry.getValue().asString(), environment));
                 else expand(entry.getValue(), environment);
             });
-        } else if (node instanceof com.fasterxml.jackson.databind.node.ArrayNode array) {
+        } else if (node instanceof tools.jackson.databind.node.ArrayNode array) {
             for (int index = 0; index < array.size(); index++) {
                 var child = array.get(index);
-                if (child.isTextual()) array.set(index, new com.fasterxml.jackson.databind.node.TextNode(substitute(child.asText(), environment)));
+                if (child.isString()) array.set(index, new tools.jackson.databind.node.StringNode(substitute(child.asString(), environment)));
                 else expand(child, environment);
             }
         }

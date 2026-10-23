@@ -1,7 +1,7 @@
 package com.sumirelabs.kita.storage;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 import com.sumirelabs.kita.settings.GuildSettings;
 import com.sumirelabs.kita.settings.SettingsRepository;
 import java.sql.Connection;
@@ -11,7 +11,7 @@ import javax.sql.DataSource;
 
 public final class JdbcSettingsRepository implements SettingsRepository {
     private final DataSource source;
-    private final ObjectMapper json = new ObjectMapper();
+    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
     private static final TypeReference<Map<String, String>> TYPE = new TypeReference<>() {};
 
     public JdbcSettingsRepository(DataSource source) { this.source = source; }
