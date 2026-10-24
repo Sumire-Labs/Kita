@@ -3,7 +3,7 @@ package com.sumirelabs.kita.music;
 import dev.arbjerg.lavalink.client.player.Track;
 
 public final class MusicSession {
-    private final java.util.concurrent.locks.ReentrantLock operations = new java.util.concurrent.locks.ReentrantLock(true);
+    final com.sumirelabs.kita.discord.SerialActions operations = new com.sumirelabs.kita.discord.SerialActions();
     final PlaybackQueue<Track> queue = new PlaybackQueue<>(1000);
     int volume = 10;
     String preset = "off";
@@ -15,13 +15,15 @@ public final class MusicSession {
     boolean staying;
     String playbackId = "";
     String playbackError = "";
+    int crossfadeSeconds;
+    volatile boolean crossfadeActive;
+    String crossfadeToken = "";
+    String crossfadeNextToken = "";
+    dev.arbjerg.lavalink.client.player.Track crossfadeNext;
+    com.sumirelabs.kita.common.CrossfadeState crossfadeState;
+    int crossfadeFailures;
 
     record Panel(long channelId, long messageId) {}
-    void operate(Runnable action) {
-        operations.lock();
-        try { action.run(); }
-        finally { operations.unlock(); }
-    }
     synchronized void stopped() { queue.clear(); if (!staying) voiceChannel = 0; }
     synchronized Panel replacePanel(long channelId, long messageId) {
         var previous = new Panel(panelChannel, panelMessage);

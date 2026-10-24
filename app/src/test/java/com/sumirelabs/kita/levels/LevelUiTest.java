@@ -1,6 +1,7 @@
 package com.sumirelabs.kita.levels;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static com.sumirelabs.kita.discord.Payloads.json;
 import com.sumirelabs.kita.settings.GuildSettings;
 import java.util.Map;
 import java.util.List;
@@ -11,15 +12,15 @@ import org.junit.jupiter.api.Test;
 class LevelUiTest {
     @Test void settingsSectionsAndLeaderboardsAreSilentV2WithinLimits() {
         for (String page : List.of("chat", "voice", "rewards")) {
-            try (var message = LevelsSettings.render(new GuildSettings(1, Map.of()), 2, page)) {
-                assertTrue(message.isUsingComponentsV2()); assertTrue(message.isSuppressedNotifications());
-                assertTrue(message.getEmbeds().isEmpty());
-                assertTrue(message.toData().toString().split("\"type\":").length - 1 <= 40);
+            { var message = LevelsSettings.render(new GuildSettings(1, Map.of()), 2, page);
+                assertTrue(message.flags().get().contains(discord4j.core.object.entity.Message.Flag.IS_COMPONENTS_V2)); assertTrue(message.flags().get().contains(discord4j.core.object.entity.Message.Flag.SUPPRESS_NOTIFICATIONS));
+                assertTrue(message.embeds().toOptional().orElse(java.util.List.of()).isEmpty());
+                assertTrue(json(message).toString().split("\"type\":").length - 1 <= 40);
             }
         }
         var entries = List.of(new LevelsRepository.Entry(1, 600, 1), new LevelsRepository.Entry(2, 600, 1));
-        try (var board = LevelMessages.leaderboard(entries, LevelPeriod.TOTAL, 0, 2)) {
-            assertTrue(board.toData().toString().contains("Lv.2")); assertTrue(board.getAllowedMentions().isEmpty());
+        { var board = LevelMessages.leaderboard(entries, LevelPeriod.TOTAL, 0, 2);
+            assertTrue(json(board).toString().contains("Lv.2")); assertTrue(json(board).get("allowed_mentions").get("parse").isEmpty());
         }
     }
     @Test void nativeRendererProducesDeterministicDistinctProfilesWithJapaneseText() throws Exception {
@@ -31,9 +32,9 @@ class LevelUiTest {
         assertFalse(java.util.Arrays.equals(first, other));
         var image = ImageIO.read(new ByteArrayInputStream(first));
         assertEquals(ProfileCardRenderer.WIDTH, image.getWidth()); assertEquals(ProfileCardRenderer.HEIGHT, image.getHeight());
-        try (var response = LevelMessages.profile(first, 1)) {
-            assertEquals(1, response.getFiles().size()); assertTrue(response.isUsingComponentsV2());
-            assertTrue(response.toData().toString().contains("attachment://profile.png"));
+        { var response = LevelMessages.profile(first, 1);
+            assertEquals(1, response.files().size()); assertTrue(response.flags().get().contains(discord4j.core.object.entity.Message.Flag.IS_COMPONENTS_V2));
+            assertTrue(json(response).toString().contains("attachment://profile.png"));
         }
     }
 }

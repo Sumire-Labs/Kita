@@ -1,12 +1,12 @@
 package com.sumirelabs.kita.previews;
 
 import static org.junit.jupiter.api.Assertions.*;
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 
 class PublicEmbedFallbackTest {
-    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
+    private final ObjectMapper json = new ObjectMapper();
     @Test void redditEmbedFallbackPreservesCaptionAndPostPoster() throws Exception {
         var page = Jsoup.parse("""
                 <img src="https://example.com/avatar.jpg">

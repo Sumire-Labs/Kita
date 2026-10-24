@@ -1,6 +1,6 @@
 package com.sumirelabs.kita.previews;
 
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 public final class FxTwitterProvider implements PreviewProvider {
     private static final Pattern STATUS = Pattern.compile("/(?:[^/]+/)?status/(\\d+)");
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
+    private final ObjectMapper json = new ObjectMapper();
 
     @Override public Preview fetch(SocialLink link) throws Exception {
         var matcher = STATUS.matcher(link.uri().getPath());
@@ -28,11 +28,11 @@ public final class FxTwitterProvider implements PreviewProvider {
             var media = new ArrayList<String>();
             for (var item : tweet.path("media").path("all")) {
                 if (media.size() == 10) break;
-                var url = item.path("url").asString();
+                var url = item.path("url").asText();
                 if (url.startsWith("https://")) media.add(url);
             }
-            return new Preview("X", tweet.path("author").path("name").asString(), tweet.path("text").asString(),
-                    link.uri().toString(), media, tweet.path("community_note").path("text").asString(),
+            return new Preview("X", tweet.path("author").path("name").asText(), tweet.path("text").asText(),
+                    link.uri().toString(), media, tweet.path("community_note").path("text").asText(),
                     tweet.path("possibly_sensitive").asBoolean()).withEngagement(EngagementParser.twitter(tweet));
         }
     }

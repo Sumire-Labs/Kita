@@ -1,9 +1,10 @@
 package com.sumirelabs.kita.discord;
 
-import net.dv8tion.jda.api.interactions.commands.build.CommandData;
+import discord4j.discordjson.json.ApplicationCommandRequest;
+import reactor.core.publisher.Mono;
 
 public interface Command {
-    CommandData definition();
-    void execute(CommandContext context) throws Exception;
+    ApplicationCommandRequest definition();
+    Mono<Void> execute(CommandContext context);
     default boolean privateReply() { return false; }
 }

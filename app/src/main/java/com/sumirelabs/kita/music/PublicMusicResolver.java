@@ -1,14 +1,14 @@
 package com.sumirelabs.kita.music;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import org.jsoup.Jsoup;
 
 public final class PublicMusicResolver {
-    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
+    private final ObjectMapper json = new ObjectMapper();
     public static final int MAX_TRACKS = 250;
 
     public List<String> resolve(String input) throws Exception {
@@ -44,13 +44,13 @@ public final class PublicMusicResolver {
     public static List<String> spotify(JsonNode root) {
         var entity = root.path("props").path("pageProps").path("state").path("data").path("entity");
         var result = new ArrayList<String>();
-        if (entity.path("type").asString().equals("track")) {
+        if (entity.path("type").asText().equals("track")) {
             var artists = new ArrayList<String>();
-            for (var artist : entity.path("artists")) artists.add(artist.path("name").asString());
-            result.add(entity.path("title").asString(entity.path("name").asString()) + " " + String.join(" ", artists));
+            for (var artist : entity.path("artists")) artists.add(artist.path("name").asText());
+            result.add(entity.path("title").asText(entity.path("name").asText()) + " " + String.join(" ", artists));
         } else {
             for (var track : entity.path("trackList")) {
-                if (!track.path("title").asString().isBlank()) result.add(track.path("title").asString() + " " + track.path("subtitle").asString());
+                if (!track.path("title").asText().isBlank()) result.add(track.path("title").asText() + " " + track.path("subtitle").asText());
                 if (result.size() == MAX_TRACKS) break;
             }
         }
@@ -60,20 +60,20 @@ public final class PublicMusicResolver {
 
     public static void apple(JsonNode node, String songId, List<String> result) {
         if (result.size() >= MAX_TRACKS) return;
-        if (node.isObject() && node.path("contentDescriptor").path("kind").asString().equals("song")
-                && !node.path("title").asString().isBlank() && node.has("artistName")) {
-            var id = node.path("contentDescriptor").path("identifiers").path("storeAdamID").asString();
-            if (songId.isBlank() || id.equals(songId)) result.add(node.path("title").asString() + " " + node.path("artistName").asString());
+        if (node.isObject() && node.path("contentDescriptor").path("kind").asText().equals("song")
+                && !node.path("title").asText().isBlank() && node.has("artistName")) {
+            var id = node.path("contentDescriptor").path("identifiers").path("storeAdamID").asText();
+            if (songId.isBlank() || id.equals(songId)) result.add(node.path("title").asText() + " " + node.path("artistName").asText());
             return;
         }
         for (var child : node) apple(child, songId, result);
     }
 
     private void appleSchema(JsonNode node, List<String> result) {
-        if (node.path("@type").asString().equals("MusicRecording")) {
+        if (node.path("@type").asText().equals("MusicRecording")) {
             var artists = node.path("byArtist");
-            String artist = artists.isArray() ? artists.path(0).path("name").asString() : artists.path("name").asString();
-            result.add(node.path("name").asString() + " " + artist);
+            String artist = artists.isArray() ? artists.path(0).path("name").asText() : artists.path("name").asText();
+            result.add(node.path("name").asText() + " " + artist);
             return;
         }
         for (var child : node) appleSchema(child, result);

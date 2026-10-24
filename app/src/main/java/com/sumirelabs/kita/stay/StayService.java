@@ -1,87 +1,63 @@
 package com.sumirelabs.kita.stay;
 
-import com.sumirelabs.kita.discord.WorkExecutor;
+import com.sumirelabs.kita.discord.SerialActions;
+import com.sumirelabs.kita.music.MusicService;
+import discord4j.core.GatewayDiscordClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import org.slf4j.LoggerFactory;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public final class StayService implements AutoCloseable {
     interface Voice {
-        void operate(long guild, Runnable action);
-        void connect(long guild, long channel);
-        void disconnect(long guild);
-        void refresh(long guild, StaySession.View view);
-        default long maintain(long guild, long channel) { return channel; }
+        <T> Mono<T> operate(long guild, Supplier<Mono<T>> action);
+        Mono<Void> connect(long guild, long channel);
+        Mono<Void> disconnect(long guild);
+        Mono<Void> refresh(long guild, StaySession.View view);
+        Mono<Long> maintain(long guild, long channel);
     }
     private final Map<Long, StaySession> sessions = new ConcurrentHashMap<>();
-    private final java.util.Set<Long> expiring = ConcurrentHashMap.newKeySet();
     private final Voice voice;
     private final Clock clock;
-    private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
+    private Disposable timer;
 
-    public StayService(java.util.function.LongFunction<net.dv8tion.jda.api.entities.Guild> guilds,
-                       com.sumirelabs.kita.music.MusicService music, WorkExecutor worker) {
-        this(new StayVoice(guilds, music), Clock.systemUTC());
-        timer.scheduleWithFixedDelay(() -> sessions.forEach((guild, session) -> {
-            synchronized (session) {
-                if (!session.due(clock.instant())) return;
-            }
-            if (!expiring.add(guild)) return;
-            if (!worker.submit(() -> {
-                try { expire(guild); }
-                finally { expiring.remove(guild); }
-            })) expiring.remove(guild);
-        }), 1, 1, TimeUnit.SECONDS);
-        timer.scheduleWithFixedDelay(() -> sessions.forEach((guild, session) -> {
-            synchronized (session) { if (!session.view().active()) return; }
-            if (!expiring.add(guild)) return;
-            if (!worker.submit(() -> {
-                try { maintain(guild); }
-                finally { expiring.remove(guild); }
-            })) expiring.remove(guild);
-        }), 15, 15, TimeUnit.SECONDS);
+    public StayService(GatewayDiscordClient client, MusicService music) {
+        this(new StayVoice(client, music), Clock.systemUTC());
+        timer = Flux.interval(Duration.ofSeconds(1)).onBackpressureDrop().concatMap(tick ->
+                Flux.fromIterable(sessions.keySet()).flatMap(guild -> expire(guild)
+                        .then(tick % 15 == 0 ? maintain(guild) : Mono.empty())
+                        .onErrorResume(error -> Mono.empty()), 16)).subscribe();
     }
     StayService(Voice voice, Clock clock) { this.voice = voice; this.clock = clock; }
-
-    private void operate(long guild, Consumer<StaySession> action) {
-        var session = sessions.computeIfAbsent(guild, ignored -> new StaySession());
-        voice.operate(guild, () -> session.operate(() -> action.accept(session)));
+    private <T> Mono<T> operate(long guild, Function<StaySession, Mono<T>> action) {
+        return voice.operate(guild, () -> action.apply(sessions.computeIfAbsent(guild, ignored -> new StaySession())));
     }
-    StaySession.View toggle(long guild, long channel) {
-        operate(guild, session -> {
+    Mono<StaySession.View> toggle(long guild, long channel) {
+        return operate(guild, session -> {
             if (session.view().active()) {
                 requireChannel(session, channel);
-                voice.disconnect(guild);
-                session.stop();
-                voice.refresh(guild, session.view());
-            } else {
-                voice.connect(guild, channel);
-                session.start(channel);
+                return voice.disconnect(guild).then(Mono.fromRunnable(session::stop))
+                        .then(Mono.defer(() -> voice.refresh(guild, session.view()))).then(Mono.fromSupplier(session::view));
             }
-        });
-        return view(guild);
-    }
-    StaySession.View view(long guild) {
-        var session = sessions.computeIfAbsent(guild, ignored -> new StaySession());
-        synchronized (session) { return session.view(); }
-    }
-    void change(long guild, long channel, String token, Duration duration, boolean stop) {
-        operate(guild, session -> {
-            session.require(token);
-            requireChannel(session, channel);
-            if (stop) { voice.disconnect(guild); session.stop(); }
-            else session.limit(clock.instant(), duration);
-            voice.refresh(guild, session.view());
+            return voice.connect(guild, channel).then(Mono.fromRunnable(() -> session.start(channel))).then(Mono.fromSupplier(session::view));
         });
     }
-    void panel(long guild, String token, long channel, long message) {
-        operate(guild, session -> { session.require(token); session.panel(channel, message); });
+    StaySession.View view(long guild) { return sessions.computeIfAbsent(guild, ignored -> new StaySession()).view(); }
+    Mono<Void> change(long guild, long channel, String token, Duration duration, boolean stop) {
+        return operate(guild, session -> {
+            session.require(token); requireChannel(session, channel);
+            return (stop ? voice.disconnect(guild).then(Mono.fromRunnable(session::stop))
+                    : Mono.<Void>fromRunnable(() -> session.limit(clock.instant(), duration)))
+                    .then(Mono.defer(() -> voice.refresh(guild, session.view())));
+        });
+    }
+    Mono<Void> panel(long guild, String token, long channel, long message) {
+        return operate(guild, session -> Mono.fromRunnable(() -> { session.require(token); session.panel(channel, message); }));
     }
     void require(long guild, long channel, String token) {
         var session = sessions.computeIfAbsent(guild, ignored -> new StaySession());
@@ -90,33 +66,23 @@ public final class StayService implements AutoCloseable {
     private static void requireChannel(StaySession session, long channel) {
         if (session.view().voiceChannel() != channel) throw new IllegalArgumentException("Kitaと同じボイスチャンネルに参加してください。");
     }
-    void expire(long guild) {
-        try {
-            operate(guild, session -> {
-                // Recheck inside the operation: the timer may have been extended or cancelled meanwhile.
-                if (!session.due(clock.instant())) return;
-                voice.disconnect(guild);
-                session.stop();
-                voice.refresh(guild, session.view());
-            });
-        } catch (RuntimeException error) {
-            LoggerFactory.getLogger(StayService.class).warn("Stay expiry failed in guild {}; will retry", guild, error);
-        }
+    Mono<Void> expire(long guild) {
+        return operate(guild, session -> {
+            if (!session.due(clock.instant())) return Mono.empty();
+            return voice.disconnect(guild).then(Mono.fromRunnable(session::stop)).then(Mono.defer(() -> voice.refresh(guild, session.view())));
+        });
     }
-    void maintain(long guild) {
-        try {
-            operate(guild, session -> {
-                if (!session.view().active() || session.due(clock.instant())) return;
-                long channel = voice.maintain(guild, session.view().voiceChannel());
-                if (channel != session.view().voiceChannel()) {
-                    session.move(channel);
-                    voice.refresh(guild, session.view());
-                }
+    Mono<Void> maintain(long guild) {
+        return operate(guild, session -> {
+            if (!session.view().active() || session.due(clock.instant())) return Mono.empty();
+            return voice.maintain(guild, session.view().voiceChannel()).flatMap(channel -> {
+                if (channel == session.view().voiceChannel()) return Mono.empty();
+                session.move(channel); return voice.refresh(guild, session.view());
             });
-        } catch (RuntimeException error) {
-            LoggerFactory.getLogger(StayService.class).debug("Stay reconnect failed in guild {}; will retry", guild);
-        }
+        });
     }
-    void forget(long guild) { sessions.remove(guild); }
-    @Override public void close() { timer.shutdownNow(); }
+    public void forget(long guild) { sessions.remove(guild); }
+    @Override public void close() { if (timer != null) timer.dispose(); if (voice instanceof AutoCloseable resource) {
+        try { resource.close(); } catch (Exception ignored) { }
+    } }
 }

@@ -1,7 +1,7 @@
 package com.sumirelabs.kita.logshare;
 
 import static org.junit.jupiter.api.Assertions.*;
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import gs.mclo.api.Instance;
 import gs.mclo.api.MclogsClient;
@@ -24,7 +24,7 @@ class MclogsGatewayTest {
             server.createContext("/1/log/", exchange -> {
                 assertTrue(exchange.getRequestURI().getQuery().contains("raw"));
                 String json = missingLog ? "{\"success\":false,\"error\":\"Log not found\"}"
-                        : JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(java.util.Map.of("id", "abc123", "content", java.util.Map.of("raw", "日本語のログ\n[hidden]")));
+                        : new ObjectMapper().writeValueAsString(java.util.Map.of("id", "abc123", "content", java.util.Map.of("raw", "日本語のログ\n[hidden]")));
                 byte[] body = json.getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(missingLog ? 404 : 200, body.length); exchange.getResponseBody().write(body); exchange.close();
             });
@@ -44,8 +44,8 @@ class MclogsGatewayTest {
                 assertNull(exchange.getRequestHeaders().getFirst("Authorization"));
                 assertTrue(exchange.getRequestHeaders().getFirst("User-Agent").startsWith("Kita/"));
                 try (var gzip = new GZIPInputStream(exchange.getRequestBody())) {
-                    var json = JsonMapper.builderWithJackson2Defaults().build().readTree(gzip.readAllBytes());
-                    assertEquals("Kita", json.path("source").asString()); content.set(json.path("content").asString());
+                    var json = new ObjectMapper().readTree(gzip.readAllBytes());
+                    assertEquals("Kita", json.path("source").asText()); content.set(json.path("content").asText());
                 }
                 byte[] body = "{\"success\":true,\"id\":\"abc123\",\"url\":\"https://mclo.gs/abc123\"}".getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, body.length); exchange.getResponseBody().write(body); exchange.close();
@@ -59,30 +59,30 @@ class MclogsGatewayTest {
     @Test void sdkUploadsGzipJsonWithUnicodeAndNoOperatorApiKey() throws Exception {
         try (var api = new Api()) {
             String text = "[12:00:00] INFO 日本語のログ\n[12:00:01] ERROR 💥";
-            assertEquals("https://mclo.gs/abc123", api.gateway().upload(text));
+            assertEquals("https://mclo.gs/abc123", api.gateway().upload(text).block());
             assertEquals(text, api.content.get()); assertEquals(1, api.uploads.get());
         }
     }
     @Test void stricterFilterLimitsRejectBeforePostInsteadOfSilentlyTruncating() throws Exception {
         try (var api = new Api()) {
             api.filterLines = 2;
-            var error = assertThrows(Exception.class, () -> api.gateway().upload("one\ntwo\nthree"));
+            var error = assertThrows(Exception.class, () -> api.gateway().upload("one\ntwo\nthree").block());
             assertTrue(LogShareMessages.error(error).contains("上限")); assertEquals(0, api.uploads.get());
         }
     }
     @Test void sdkFallbackLimitsCannotSilentlyShortenLogsWhenFiltersEndpointFails() throws Exception {
         try (var api = new Api()) {
             api.filtersFail = true;
-            var error = assertThrows(Exception.class, () -> api.gateway().upload("line\n".repeat(15_000)));
+            var error = assertThrows(Exception.class, () -> api.gateway().upload("line\n".repeat(15_000)).block());
             assertTrue(LogShareMessages.error(error).contains("上限")); assertEquals(0, api.uploads.get());
         }
     }
     @Test void downloadsStoredContentAsUtf8AndDoesNotDownloadApiErrorsAsLogs() throws Exception {
         try (var api = new Api()) {
-            assertArrayEquals("日本語のログ\n[hidden]".getBytes(StandardCharsets.UTF_8), api.gateway().download("abc123"));
+            assertArrayEquals("日本語のログ\n[hidden]".getBytes(StandardCharsets.UTF_8), api.gateway().download("abc123").block());
             api.missingLog = true;
-            assertThrows(Exception.class, () -> api.gateway().download("missing"));
-            assertThrows(IllegalArgumentException.class, () -> api.gateway().download("../invalid"));
+            assertThrows(Exception.class, () -> api.gateway().download("missing").block());
+            assertThrows(IllegalArgumentException.class, () -> api.gateway().download("../invalid").block());
         }
     }
 }

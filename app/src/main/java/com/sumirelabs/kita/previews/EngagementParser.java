@@ -1,6 +1,6 @@
 package com.sumirelabs.kita.previews;
 
-import tools.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.EnumMap;
 import java.util.Locale;
@@ -88,7 +88,7 @@ public final class EngagementParser {
         Long number = null;
         try {
             if (node.isNumber()) number = node.decimalValue().longValueExact();
-            else number = integer(node.asString());
+            else number = integer(node.asText());
         }
         catch (ArithmeticException ignored) { /* Fractional values and overflows are not counters. */ }
         put(values, metric, number);

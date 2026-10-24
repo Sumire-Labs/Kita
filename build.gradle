@@ -5,8 +5,7 @@ plugins {
 }
 apply from: 'gradle/version.gradle'
 ext {
-    jdaVersion = '6.7.0'
-    jacksonVersion = '3.2.4'
+    jacksonVersion = '2.22.3'
 }
 subprojects {
     apply plugin: 'java-library'

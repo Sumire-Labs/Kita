@@ -1,7 +1,7 @@
 package com.sumirelabs.kita.previews;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class YtDlpProvider implements PreviewProvider {
     private final String executable;
-    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
+    private final ObjectMapper json = new ObjectMapper();
     public YtDlpProvider(String executable) { this.executable = executable; }
 
     @Override public Preview fetch(SocialLink link) throws Exception {
@@ -47,8 +47,8 @@ public final class YtDlpProvider implements PreviewProvider {
         boolean playable = collect(data, media);
         for (var entry : data.path("entries")) if (media.size() < 10) playable |= collect(entry, media);
         if (media.isEmpty()) throw new IllegalStateException("yt-dlp returned no displayable media");
-        return new Preview(link.platform(), data.path("uploader").asString(data.path("channel").asString()),
-                data.path("title").asString(data.path("description").asString()), link.uri().toString(),
+        return new Preview(link.platform(), data.path("uploader").asText(data.path("channel").asText()),
+                data.path("title").asText(data.path("description").asText()), link.uri().toString(),
                 media.stream().distinct().limit(10).toList(), playable ? "" : "プレビュー画像です。動画は投稿元で再生できます。",
                 data.path("age_limit").asInt() >= 18, playable).withEngagement(EngagementParser.video(data, link.platform()));
     }
@@ -56,13 +56,13 @@ public final class YtDlpProvider implements PreviewProvider {
     private static boolean collect(JsonNode data, List<String> media) {
         String video = "";
         for (var format : data.path("formats")) {
-            if (format.path("ext").asString().equals("mp4") && !format.path("vcodec").asString("").equals("none")
-                    && !format.path("acodec").asString("").equals("none")
-                    && format.path("protocol").asString().equals("https") && format.path("height").asInt() <= 720) {
-                video = format.path("url").asString();
+            if (format.path("ext").asText().equals("mp4") && !format.path("vcodec").asText("").equals("none")
+                    && !format.path("acodec").asText("").equals("none")
+                    && format.path("protocol").asText().equals("https") && format.path("height").asInt() <= 720) {
+                video = format.path("url").asText();
             }
         }
-        String url = video.isBlank() ? data.path("thumbnail").asString() : video;
+        String url = video.isBlank() ? data.path("thumbnail").asText() : video;
         if (url.startsWith("https://")) media.add(url);
         return !video.isBlank();
     }

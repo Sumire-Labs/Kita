@@ -1,52 +1,31 @@
 package com.sumirelabs.kita.tickets;
 
-import com.sumirelabs.kita.tickets.TicketRecord;
-import com.sumirelabs.kita.tickets.TicketRepository;
-import com.sumirelabs.kita.discord.WorkExecutor;
-import java.util.EnumSet;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.LongFunction;
-import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import com.sumirelabs.kita.discord.Access;
+import discord4j.core.GatewayDiscordClient;
+import discord4j.core.object.entity.channel.TextChannel;
+import discord4j.rest.http.client.ClientException;
+import java.time.Duration;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public final class TicketRecovery implements AutoCloseable {
-    private final java.util.concurrent.ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private final AtomicBoolean running = new AtomicBoolean();
-    public TicketRecovery(TicketRepository repository, LongFunction<Guild> guilds, WorkExecutor worker) {
-        scheduler.scheduleWithFixedDelay(() -> {
-            if (!running.compareAndSet(false, true)) return;
-            if (!worker.submit(() -> {
-                try {
-                    for (var record : repository.pending()) {
-                        var guild = guilds.apply(record.guildId());
-                        if (guild == null || guild.getJDA().getStatus() != net.dv8tion.jda.api.JDA.Status.CONNECTED) continue;
-                        if (record.status().equals("opening")) {
-                            String topic = "kita:ticket:" + guild.getId() + ":" + record.ownerId();
-                            var channel = guild.getTextChannels().stream().filter(c -> topic.equals(c.getTopic())).findFirst();
-                            if (channel.isPresent()) repository.activate(record.guildId(), record.ownerId(), channel.get().getIdLong());
-                            else repository.release(record.guildId(), record.ownerId());
-                        } else {
-                            var channel = guild.getTextChannelById(record.channelId());
-                            if (channel == null || channel.getName().startsWith("closed-")) repository.close(record.guildId(), record.channelId());
-                            else {
-                                restorePermissions(channel, record);
-                                repository.abortClose(record.guildId(), record.channelId());
-                            }
-                        }
+    private final Disposable timer;
+    public TicketRecovery(TicketRepository repository, GatewayDiscordClient client) {
+        timer = Flux.interval(Duration.ofSeconds(60)).onBackpressureDrop().concatMap(tick -> repository.pending().flatMap(record ->
+                client.getGuildById(Access.id(record.guildId())).flatMap(guild -> {
+                    if (record.status().equals("opening")) {
+                        String topic = "kita:ticket:" + record.guildId() + ":" + record.ownerId();
+                        return guild.getChannels().ofType(TextChannel.class).filter(channel -> channel.getTopic().map(topic::equals).orElse(false)).next()
+                                .flatMap(channel -> repository.activate(record.guildId(), record.ownerId(), channel.getId().asLong()).thenReturn(true))
+                                .switchIfEmpty(repository.release(record.guildId(), record.ownerId())).then();
                     }
-                } finally { running.set(false); }
-            })) running.set(false);
-        }, 60, 60, TimeUnit.SECONDS);
+                    return client.getChannelById(Access.id(record.channelId())).ofType(TextChannel.class)
+                            .flatMap(channel -> channel.getName().startsWith("closed-") ? repository.close(record.guildId(), record.channelId())
+                                    : TicketPermissions.change(channel, record, false).then(repository.abortClose(record.guildId(), record.channelId())))
+                            .onErrorResume(ClientException.class, error -> error.getStatus().code() == 404
+                                    ? repository.close(record.guildId(), record.channelId()) : Mono.error(error));
+                }).onErrorResume(error -> Mono.empty()), 8)).subscribe();
     }
-
-    static void restorePermissions(TextChannel channel, TicketRecord record) {
-        var access = EnumSet.of(Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND, Permission.MESSAGE_HISTORY,
-                Permission.MESSAGE_ATTACH_FILES);
-        channel.getManager().putMemberPermissionOverride(record.ownerId(), access, java.util.List.of())
-                .putRolePermissionOverride(record.supportRoleId(), access, java.util.List.of()).complete();
-    }
-    @Override public void close() { scheduler.shutdownNow(); }
+    @Override public void close() { timer.dispose(); }
 }

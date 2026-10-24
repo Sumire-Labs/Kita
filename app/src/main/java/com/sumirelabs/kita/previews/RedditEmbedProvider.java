@@ -1,7 +1,7 @@
 package com.sumirelabs.kita.previews;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -15,7 +15,7 @@ import org.jsoup.nodes.Document;
 
 public final class RedditEmbedProvider implements PreviewProvider {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
+    private final ObjectMapper json = new ObjectMapper();
 
     @Override public Preview fetch(SocialLink link) throws Exception {
         var path = link.uri().getPath();
@@ -56,10 +56,10 @@ public final class RedditEmbedProvider implements PreviewProvider {
         List<String> media = page.select("img.preview-image[src], [poster]").stream()
                 .map(element -> element.absUrl(element.hasAttr("poster") ? "poster" : "src"))
                 .filter(RedditEmbedProvider::isMediaUrl).distinct().limit(10).toList();
-        String title = metadata.path("title").asString();
+        String title = metadata.path("title").asText();
         if (title.isBlank()) throw new IllegalStateException("Reddit public preview contains no title");
         boolean sensitive = !page.select("[nsfw=true], [data-nsfw=true], [spoiler=true], [data-spoiler=true]").isEmpty();
-        return new Preview("Reddit", "u/" + metadata.path("author_name").asString(), title, url, media, "", sensitive, false)
+        return new Preview("Reddit", "u/" + metadata.path("author_name").asText(), title, url, media, "", sensitive, false)
                 .withEngagement(EngagementParser.redditEmbed(metadata, page));
     }
 

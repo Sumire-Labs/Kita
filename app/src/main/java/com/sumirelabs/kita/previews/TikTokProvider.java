@@ -1,7 +1,7 @@
 package com.sumirelabs.kita.previews;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -14,7 +14,7 @@ import java.util.List;
 public final class TikTokProvider implements PreviewProvider {
     private final PreviewProvider videos;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private final JsonMapper json = JsonMapper.builderWithJackson2Defaults().build();
+    private final ObjectMapper json = new ObjectMapper();
     public TikTokProvider(PreviewProvider videos) { this.videos = videos; }
 
     @Override public Preview fetch(SocialLink link) throws Exception {
@@ -31,9 +31,9 @@ public final class TikTokProvider implements PreviewProvider {
     }
 
     static Preview parse(JsonNode data, String url) {
-        var thumbnail = data.path("thumbnail_url").asString();
+        var thumbnail = data.path("thumbnail_url").asText();
         if (!thumbnail.startsWith("https://")) throw new IllegalStateException("TikTok public preview contains no poster");
-        return new Preview("TikTok", data.path("author_name").asString(), data.path("title").asString(), url,
+        return new Preview("TikTok", data.path("author_name").asText(), data.path("title").asText(), url,
                 List.of(thumbnail), "プレビュー画像です。動画は投稿元で再生できます。", false, false)
                 .withEngagement(EngagementParser.video(data, "tiktok"));
     }

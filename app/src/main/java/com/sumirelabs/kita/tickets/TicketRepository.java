@@ -1,15 +1,16 @@
 package com.sumirelabs.kita.tickets;
 
-import java.util.Optional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public interface TicketRepository {
-    boolean reserve(long guildId, long ownerId, String subject, long supportRoleId);
-    void activate(long guildId, long ownerId, long channelId);
-    void release(long guildId, long ownerId);
-    Optional<TicketRecord> find(long guildId, long channelId);
-    void claim(long guildId, long channelId, long assigneeId);
-    boolean beginClose(long guildId, long channelId);
-    void abortClose(long guildId, long channelId);
-    java.util.List<TicketRecord> pending();
-    void close(long guildId, long channelId);
+    Mono<Boolean> reserve(long guildId, long ownerId, String subject, long supportRoleId);
+    Mono<Void> activate(long guildId, long ownerId, long channelId);
+    Mono<Boolean> release(long guildId, long ownerId);
+    Mono<TicketRecord> find(long guildId, long channelId);
+    Mono<Void> claim(long guildId, long channelId, long assigneeId);
+    Mono<Boolean> beginClose(long guildId, long channelId);
+    Mono<Void> abortClose(long guildId, long channelId);
+    Flux<TicketRecord> pending();
+    Mono<Void> close(long guildId, long channelId);
 }

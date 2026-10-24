@@ -11,4 +11,7 @@ presets/**
 !presets/.gitkeep
 docs/**
 !docs/architecture.md
+!docs/earthquakes.md
+!docs/eventlog.md
+!docs/crossfade.md
 AGENTS.md

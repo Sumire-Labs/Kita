@@ -1,36 +1,35 @@
 package com.sumirelabs.kita.app;
 
-import com.sumirelabs.kita.discord.WorkExecutor;
+import com.sumirelabs.kita.discord.ReactiveWork;
+import com.sumirelabs.kita.levels.LevelsService;
+import com.sumirelabs.kita.levels.VoiceXpListener;
 import com.sumirelabs.kita.music.MusicService;
 import com.sumirelabs.kita.music.PlayerRefresh;
 import com.sumirelabs.kita.stay.StayService;
-import com.sumirelabs.kita.storage.Database;
-import com.sumirelabs.kita.storage.JdbcSettingsRepository;
-import com.sumirelabs.kita.storage.JdbcTicketRepository;
-import com.sumirelabs.kita.storage.JdbcLogShareRepository;
-import com.sumirelabs.kita.storage.JdbcLevelsRepository;
-import com.sumirelabs.kita.levels.LevelsService;
-import com.sumirelabs.kita.levels.VoiceXpListener;
+import com.sumirelabs.kita.storage.*;
 import com.sumirelabs.kita.tickets.TicketRecovery;
-import dev.arbjerg.lavalink.libraries.jda.JDAVoiceUpdateListener;
 import dev.arbjerg.lavalink.client.Helpers;
+import discord4j.core.DiscordClient;
+import discord4j.core.GatewayDiscordClient;
+import discord4j.core.object.presence.ClientPresence;
+import discord4j.core.shard.ShardingStrategy;
+import discord4j.gateway.intent.Intent;
+import discord4j.gateway.intent.IntentSet;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
-import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.requests.GatewayIntent;
-import net.dv8tion.jda.api.sharding.DefaultShardManagerBuilder;
-import net.dv8tion.jda.api.sharding.ShardManager;
-import net.dv8tion.jda.api.utils.MemberCachePolicy;
-import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public final class Kita implements AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean();
-    private final WorkExecutor worker = new WorkExecutor();
+    private final AtomicBoolean ready = new AtomicBoolean();
     private Database database;
     private MusicService music;
-    private ShardManager shards;
+    private GatewayDiscordClient gateway;
     private PlayerRefresh refresh;
     private StayService stay;
     private HealthServer health;
@@ -38,6 +37,8 @@ public final class Kita implements AutoCloseable {
     private StatusPresence presence;
     private VoiceXpListener voiceXp;
     private LevelsService levels;
+    private FeatureWiring features;
+    private Disposable healthPoll;
 
     public static void main(String[] arguments) throws Exception {
         boolean check = arguments.length > 0 && arguments[0].equals("--check-config");
@@ -45,45 +46,46 @@ public final class Kita implements AutoCloseable {
         var config = ConfigLoader.load(path);
         if (check) { System.out.println("Kita configuration is valid (credentials were not contacted)."); return; }
         var application = new Kita();
+        Runtime.getRuntime().addShutdownHook(new Thread(application::close, "kita-shutdown"));
         try {
             application.start(config);
-            Runtime.getRuntime().addShutdownHook(new Thread(application::close, "kita-shutdown"));
-        } catch (Exception error) { application.close(); throw error; }
+            application.gateway.onDisconnect().block();
+        } finally { application.close(); }
     }
 
     private void start(KitaConfig config) throws Exception {
-        var buildVersion = version();
-        presence = new StatusPresence(buildVersion);
-        var db = config.database();
-        database = new Database(db.url(), db.user(), db.password());
-        var settings = new JdbcSettingsRepository(database.source());
-        levels = new LevelsService(settings, new JdbcLevelsRepository(database.source()), worker);
-        voiceXp = new VoiceXpListener(levels, () -> shards == null ? java.util.List.of() : shards.getGuilds(), worker);
-        if (config.music().enabled()) {
-            music = new MusicService(Helpers.getUserIdFromToken(config.bot().token()), config.music().uri(),
-                    config.music().password(), Path.of(config.music().presetsDirectory()), worker, config.music().defaultPreset());
-        }
-        var builder = DefaultShardManagerBuilder.createLight(config.bot().token(), GatewayIntent.GUILD_MESSAGES,
-                        GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.GUILD_VOICE_STATES)
-                .enableCache(CacheFlag.VOICE_STATE)
-                .setMemberCachePolicy(MemberCachePolicy.VOICE).setEnableShutdownHook(false)
-                .setShardsTotal(config.bot().shards() == 0 ? -1 : config.bot().shards())
-                .setActivity(presence.current());
-        if (music != null) builder.setVoiceDispatchInterceptor(new JDAVoiceUpdateListener(music.client()));
-        stay = new StayService(id -> shards == null ? null : shards.getGuildById(id), music, worker);
-        builder.addEventListeners(FeatureWiring.listeners(config, settings,
-                new JdbcTicketRepository(database.source()), worker, music, stay,
-                id -> shards == null ? null : shards.getGuildById(id), buildVersion, new JdbcLogShareRepository(database.source()), levels, voiceXp));
-        shards = builder.build();
-        presence.start(shards);
-        ticketRecovery = new TicketRecovery(new JdbcTicketRepository(database.source()), shards::getGuildById, worker);
-        if (music != null) refresh = new PlayerRefresh(music, shards::getGuildById, worker);
-        health = new HealthServer(() -> shards.getShards().size() == shards.getShardsTotal()
-                && !shards.getShards().isEmpty()
-                && shards.getShards().stream().allMatch(shard -> shard.getStatus() == JDA.Status.CONNECTED));
-        LoggerFactory.getLogger(Kita.class).info("Kita {} started with {} shards", buildVersion, shards.getShardsTotal());
+        var version = version(); presence = new StatusPresence(version);
+        var db = config.database(); database = new Database(db.url(), db.user(), db.password());
+        database.migrate().block(Duration.ofMinutes(2));
+        var settings = new R2dbcSettingsRepository(database.source());
+        var tickets = new R2dbcTicketRepository(database.source());
+        levels = new LevelsService(settings, new R2dbcLevelsRepository(database.source()));
+        if (config.music().enabled()) music = new MusicService(Helpers.getUserIdFromToken(config.bot().token()),
+                config.music().uri(), config.music().password(), Path.of(config.music().presetsDirectory()), config.music().defaultPreset(), settings);
+        var initial = ReactiveWork.io(presence::current).block(Duration.ofSeconds(20));
+        var discord = DiscordClient.create(config.bot().token());
+        var intents = GatewayPolicy.intents(discord).block(Duration.ofSeconds(20));
+        gateway = discord.gateway().setEnabledIntents(intents).setStore(GatewayPolicy.store())
+                .setMemberRequestFilter(discord4j.core.shard.MemberRequestFilter.none())
+                .setSharding(config.bot().shards() == 0 ? ShardingStrategy.recommended() : ShardingStrategy.fixed(config.bot().shards()))
+                .setInitialPresence(shard -> ClientPresence.online(initial)).login().block(Duration.ofMinutes(3));
+        if (gateway == null) throw new IllegalStateException("Discord login did not complete");
+        if (music != null) music.installVoice(gateway);
+        stay = new StayService(gateway, music); voiceXp = new VoiceXpListener(levels, gateway);
+        features = new FeatureWiring(gateway, config, settings, tickets, music, stay, version,
+                new R2dbcLogShareRepository(database.source()), levels, voiceXp, new R2dbcEarthquakeRepository(database.source()),
+                new R2dbcEventLogRepository(database.source()));
+        CommandRegistration.register(gateway, features.commands(), config.bot().developmentGuildId()).block(Duration.ofMinutes(1));
+        features.start();
+        presence.start(gateway); ticketRecovery = new TicketRecovery(tickets, gateway);
+        if (music != null) refresh = new PlayerRefresh(music, gateway);
+        healthPoll = Flux.interval(Duration.ZERO, Duration.ofSeconds(2)).concatMap(tick ->
+                Flux.range(0, gateway.getGatewayClientGroup().getShardCount()).flatMap(shard ->
+                        gateway.getGatewayClient(shard).map(client -> client.isConnected()).orElse(Mono.just(false))).all(Boolean::booleanValue))
+                .subscribe(ready::set, error -> ready.set(false));
+        health = new HealthServer(ready::get);
+        LoggerFactory.getLogger(Kita.class).info("Kita {} started with {} shards", version, gateway.getGatewayClientGroup().getShardCount());
     }
-
     static String version() throws Exception {
         var properties = new Properties();
         try (var stream = Kita.class.getResourceAsStream("/kita-build.properties")) {
@@ -92,19 +94,21 @@ public final class Kita implements AutoCloseable {
         }
         return properties.getProperty("version");
     }
-
     @Override public void close() {
         if (!closed.compareAndSet(false, true)) return;
+        ready.set(false);
         if (health != null) health.close();
+        if (healthPoll != null) healthPoll.dispose();
+        if (features != null) features.close();
         if (presence != null) presence.close();
         if (refresh != null) refresh.close();
         if (stay != null) stay.close();
         if (voiceXp != null) voiceXp.close();
         if (levels != null) levels.close();
         if (ticketRecovery != null) ticketRecovery.close();
-        worker.close();
+        if (gateway != null) { try { gateway.logout().block(Duration.ofSeconds(15)); } catch (RuntimeException ignored) { } }
         if (music != null) music.close();
-        if (shards != null) shards.shutdown();
-        if (database != null) database.close();
+        if (database != null) { try { database.dispose().block(Duration.ofSeconds(15)); } catch (RuntimeException ignored) { } }
+        ReactiveWork.close();
     }
 }

@@ -1,6 +1,7 @@
 package com.sumirelabs.kita.previews;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static com.sumirelabs.kita.discord.Payloads.json;
 import static com.sumirelabs.kita.previews.Engagement.Metric.*;
 import java.util.List;
 import java.util.Map;
@@ -38,10 +39,10 @@ class EngagementRendererTest {
         var original = new Preview("X", "author", "caption", "https://x.com/example/status/1", List.of(), "", false, false);
         var counted = original.withEngagement(new Engagement(Map.of(LIKES, 42L, REPOSTS, 7L)));
         var message = PreviewRenderer.render(counted, false);
-        var payload = message.toData().toString();
-        assertTrue(message.isUsingComponentsV2());
-        assertTrue(message.isSuppressedNotifications());
-        assertFalse(message.toData().hasKey("embeds"));
+        var payload = json(message).toString();
+        assertTrue(message.flags().get().contains(discord4j.core.object.entity.Message.Flag.IS_COMPONENTS_V2));
+        assertTrue(message.flags().get().contains(discord4j.core.object.entity.Message.Flag.SUPPRESS_NOTIFICATIONS));
+        assertFalse(json(message).has("embeds"));
         assertTrue(payload.contains("いいね **42**"));
         assertTrue(payload.contains("リポスト **7**"));
         assertFalse(counted.replacesOriginal());

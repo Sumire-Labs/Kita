@@ -2,19 +2,21 @@ package com.sumirelabs.kita.levels;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.sumirelabs.kita.discord.Access;
+import com.sumirelabs.kita.discord.SerialActions;
 import com.sumirelabs.kita.settings.GuildSettings;
+import discord4j.core.object.entity.Guild;
+import discord4j.core.object.entity.Role;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Set;
-import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.Role;
-import org.slf4j.LoggerFactory;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-final class RewardRoles {
+final class RewardRoles implements AutoCloseable {
     private record Key(long guild, long user, int level, String configuration, boolean stack) {}
     private final LevelsRepository repository;
-    private final Object[] locks = java.util.stream.IntStream.range(0, 256).mapToObj(ignored -> new Object()).toArray();
+    private final Map<Long, SerialActions> operations = new ConcurrentHashMap<>();
     private final Cache<Key, Boolean> synced = Caffeine.newBuilder().maximumSize(100_000).expireAfterWrite(Duration.ofMinutes(15)).build();
     RewardRoles(LevelsRepository repository) { this.repository = repository; }
     boolean needsSync(long guild, long user, long xp, GuildSettings settings) {
@@ -25,45 +27,32 @@ final class RewardRoles {
         return LevelCurve.level(xp) >= minimum && synced.getIfPresent(new Key(guild, user, LevelCurve.level(xp),
                 settings.value("levels.rewards", "[]"), config.stackRewards())) == null;
     }
-    boolean sync(Guild guild, long user, long xp, GuildSettings settings) {
-        if (!needsSync(guild.getIdLong(), user, xp, settings)) return false;
-        synchronized (locks[Math.floorMod(java.util.Objects.hash(guild.getIdLong(), user), locks.length)]) {
-            return apply(guild, user, Math.max(xp, repository.profile(guild.getIdLong(), user).xp()), settings);
-        }
+    Mono<Boolean> sync(Guild guild, long user, long xp, GuildSettings settings) {
+        return Mono.defer(() -> {
+            if (!needsSync(guild.getId().asLong(), user, xp, settings)) return Mono.just(false);
+            return operations.computeIfAbsent(guild.getId().asLong(), ignored -> new SerialActions())
+                    .submit(() -> repository.profile(guild.getId().asLong(), user).flatMap(profile -> apply(guild, user, Math.max(xp, profile.xp()), settings)));
+        });
     }
-    private boolean apply(Guild guild, long user, long xp, GuildSettings settings) {
-        try {
-        var rewards = LevelReward.read(settings);
+    private Mono<Boolean> apply(Guild guild, long user, long xp, GuildSettings settings) {
+        long id = guild.getId().asLong();
         var config = LevelConfig.from(settings);
-        var key = new Key(guild.getIdLong(), user, LevelCurve.level(xp), settings.value("levels.rewards", "[]"), config.stackRewards());
-        if (synced.getIfPresent(key) != null) return false;
-        var grants = repository.grants(guild.getIdLong(), user);
-        if (rewards.isEmpty() && grants.isEmpty()) { synced.put(key, true); return false; }
-            var member = guild.retrieveMemberById(user).complete();
-            Set<Long> desired = LevelReward.desired(rewards, key.level, config.stackRewards());
-            var add = new ArrayList<Role>(); var remove = new ArrayList<Role>();
-            for (long id : desired) {
-                var role = guild.getRoleById(id);
-                if (role == null) continue;
-                if (!member.getRoles().contains(role)) { require(guild, role); add.add(role); }
-            }
-            for (long id : grants) {
-                if (desired.contains(id)) continue;
-                var role = guild.getRoleById(id);
-                if (role != null && member.getRoles().contains(role)) { require(guild, role); remove.add(role); }
-            }
-            if (!add.isEmpty() || !remove.isEmpty()) guild.modifyMemberRoles(member, add, remove).complete();
-            for (var role : add) repository.granted(guild.getIdLong(), user, role.getIdLong());
-            for (long id : grants) if (!desired.contains(id)) repository.revoked(guild.getIdLong(), user, id);
-            synced.put(key, true); return !add.isEmpty();
-        } catch (Exception error) {
-            LoggerFactory.getLogger(RewardRoles.class).warn("Level reward sync failed in guild {} for user {}: {}",
-                    guild.getIdLong(), user, error.getClass().getSimpleName());
-            return false;
-        }
+        var key = new Key(id, user, LevelCurve.level(xp), settings.value("levels.rewards", "[]"), config.stackRewards());
+        if (synced.getIfPresent(key) != null) return Mono.just(false);
+        var desired = LevelReward.desired(LevelReward.read(settings), key.level, config.stackRewards());
+        return repository.grants(id, user).flatMap(grants -> Access.member(guild.getClient(), id, user).flatMap(member ->
+                Flux.fromIterable(desired).concatMap(roleId -> {
+                    if (member.getRoleIds().contains(Access.id(roleId))) return Mono.just(false);
+                    return guild.getRoleById(Access.id(roleId)).flatMap(role -> require(guild, role)
+                            .then(member.addRole(role.getId())).then(repository.granted(id, user, roleId)).thenReturn(true)).defaultIfEmpty(false);
+                }).collectList().flatMap(added -> Flux.fromIterable(grants).filter(roleId -> !desired.contains(roleId))
+                        .concatMap(roleId -> guild.getRoleById(Access.id(roleId)).flatMap(role -> member.getRoleIds().contains(role.getId())
+                                        ? require(guild, role).then(member.removeRole(role.getId())) : Mono.empty())
+                                .then(repository.revoked(id, user, roleId)))
+                        .then(Mono.just(added.contains(true)))))).doOnSuccess(ignored -> synced.put(key, true));
     }
-    static void require(Guild guild, Role role) {
-        if (role.isPublicRole() || role.isManaged() || !guild.getSelfMember().hasPermission(Permission.MANAGE_ROLES)
-                || !guild.getSelfMember().canInteract(role)) throw new IllegalArgumentException("Botが操作できる通常のロールを選択してください。");
+    static Mono<Void> require(Guild guild, Role role) {
+        return Access.member(guild.getClient(), guild.getId().asLong(), guild.getClient().getSelfId().asLong()).flatMap(self -> Access.role(self, role));
     }
+    @Override public void close() { operations.values().forEach(SerialActions::close); }
 }

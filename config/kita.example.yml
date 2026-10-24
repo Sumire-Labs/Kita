@@ -3,7 +3,7 @@ bot:
   shards: 0 # 0 = Discordの推奨値で自動シャーディング
   developmentGuildId: 0 # 開発サーバーIDを指定するとコマンドをそのサーバーだけに登録
 database:
-  url: "${JDBC_URL:-jdbc:mariadb://database:3306/kita}"
+  url: "${JDBC_URL:-r2dbc:mariadb://database:3306/kita}"
   user: kita
   password: "${MARIADB_PASSWORD}"
 deepl:

@@ -1,14 +1,14 @@
 package com.sumirelabs.kita.levels;
 
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sumirelabs.kita.settings.GuildSettings;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public record LevelReward(int level, long roleId) {
-    private static final JsonMapper JSON = JsonMapper.builderWithJackson2Defaults().build();
+    private static final ObjectMapper JSON = new ObjectMapper();
     private static final TypeReference<List<LevelReward>> TYPE = new TypeReference<>() {};
     public LevelReward { if (level < 1 || level > 100_000 || roleId <= 0) throw new IllegalArgumentException("報酬のレベル・ロールが不正です。"); }
     public static List<LevelReward> read(GuildSettings settings) {

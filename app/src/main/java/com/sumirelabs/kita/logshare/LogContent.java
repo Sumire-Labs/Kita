@@ -4,20 +4,17 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
-import net.dv8tion.jda.api.entities.Message;
+
+
 
 final class LogContent {
     static final int MAX_BYTES = 10 * 1024 * 1024;
     static final int MAX_LINES = 25_000;
     private LogContent() {}
-    static String download(Message.Attachment attachment) throws Exception {
-        if (attachment.getSize() > MAX_BYTES) throw new IllegalArgumentException("ログは10MiB以下にしてください。");
-        try (var stream = attachment.getProxy().download().get(20, TimeUnit.SECONDS)) {
-            byte[] bytes = stream.readNBytes(MAX_BYTES + 1);
-            if (bytes.length > MAX_BYTES) throw new IllegalArgumentException("ログは10MiB以下にしてください。");
-            return decode(bytes);
-        }
+    static reactor.core.publisher.Mono<String> download(discord4j.core.object.entity.Attachment attachment) {
+        if (attachment.getSize() > MAX_BYTES) return reactor.core.publisher.Mono.error(new IllegalArgumentException("ログは10MiB以下にしてください。"));
+        return com.sumirelabs.kita.discord.HttpBytes.get(attachment.getUrl(), MAX_BYTES)
+                .flatMap(bytes -> com.sumirelabs.kita.discord.ReactiveWork.cpu(() -> decode(bytes)));
     }
     static String decode(byte[] bytes) {
         var charset = StandardCharsets.UTF_8;

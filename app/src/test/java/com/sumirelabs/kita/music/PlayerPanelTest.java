@@ -1,39 +1,40 @@
 package com.sumirelabs.kita.music;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static com.sumirelabs.kita.discord.Payloads.json;
 import com.sumirelabs.kita.common.PresetFiles.Preset;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import net.dv8tion.jda.api.components.buttons.ButtonStyle;
+import discord4j.core.object.component.Button;
 import org.junit.jupiter.api.Test;
 
 class PlayerPanelTest {
     @Test void compactPlayerHasOnlyIconControlsAndTwoSelectors() {
         var message = PlayerPanel.render(new MusicSession(), null, List.of());
-        var children = message.toData().getArray("components").getObject(0).getArray("components");
-        assertEquals(6, children.length());
-        var transport = children.getObject(2).getArray("components");
-        assertEquals(3, transport.length());
-        assertEquals("music:back", transport.getObject(0).getString("custom_id"));
-        assertEquals("music:pause", transport.getObject(1).getString("custom_id"));
-        assertEquals("▶️", transport.getObject(1).getObject("emoji").getString("name"));
-        assertEquals("music:skip", transport.getObject(2).getString("custom_id"));
-        assertFalse(transport.getObject(0).hasKey("label"));
-        var volume = children.getObject(5).getArray("components").getObject(0).getArray("options");
-        assertEquals(21, volume.length());
-        assertTrue(volume.getObject(2).getBoolean("default"));
-        assertEquals("10", volume.getObject(2).getString("value"));
+        var children = json(message).get("components").get(0).get("components");
+        assertEquals(6, children.size());
+        var transport = children.get(2).get("components");
+        assertEquals(3, transport.size());
+        assertEquals("music:back", transport.get(0).get("custom_id").asText());
+        assertEquals("music:pause", transport.get(1).get("custom_id").asText());
+        assertEquals("▶️", transport.get(1).get("emoji").get("name").asText());
+        assertEquals("music:skip", transport.get(2).get("custom_id").asText());
+        assertFalse(transport.get(0).has("label"));
+        var volume = children.get(5).get("components").get(0).get("options");
+        assertEquals(21, volume.size());
+        assertTrue(volume.get(2).get("default").asBoolean());
+        assertEquals("10", volume.get(2).get("value").asText());
     }
 
     @Test void loopModeIsVisiblySelected() {
         var session = new MusicSession();
         session.queue.toggleLoop(PlaybackQueue.Loop.TRACK);
-        var children = PlayerPanel.render(session, null, List.of()).toData().getArray("components")
-                .getObject(0).getArray("components");
-        var loops = children.getObject(3).getArray("components");
-        assertEquals(ButtonStyle.PRIMARY.getKey(), loops.getObject(0).getInt("style"));
-        assertEquals(ButtonStyle.SECONDARY.getKey(), loops.getObject(1).getInt("style"));
+        var children = json(PlayerPanel.render(session, null, List.of())).get("components")
+                .get(0).get("components");
+        var loops = children.get(3).get("components");
+        assertEquals(Button.Style.PRIMARY.getValue(), loops.get(0).get("style").asInt());
+        assertEquals(Button.Style.SECONDARY.getValue(), loops.get(1).get("style").asInt());
     }
 
     @Test void presetPagingFitsDiscordLimitsAndKeepsAllPresetsReachable() {

@@ -64,7 +64,7 @@ jobs:
       - name: Test and package
         run: bash ./gradlew clean releaseBundle --no-daemon --console=plain
         env:
-          KITA_TEST_DB_URL: jdbc:mariadb://localhost:3306/kita_test
+          KITA_TEST_DB_URL: r2dbc:mariadb://localhost:3306/kita_test
           KITA_TEST_DB_USER: kita_test
           KITA_TEST_DB_PASSWORD: integration-only
           KITA_TEST_FFMPEG: "true"

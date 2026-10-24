@@ -1,21 +1,18 @@
 package com.sumirelabs.kita.music;
 
+import com.sumirelabs.kita.discord.Access;
 import com.sumirelabs.kita.discord.CommandContext;
-import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
-import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 final class PlayerPanels {
     private PlayerPanels() {}
-
-    static void publish(CommandContext context, MusicService music) {
-        long guildId = context.guild().getIdLong();
-        var panel = PlayerPanel.render(music, guildId);
-        var message = context.slash() == null ? context.channel().sendMessage(panel).complete()
-                : context.slash().getHook().sendMessage(panel).complete();
-        var previous = music.session(guildId).replacePanel(message.getChannelIdLong(), message.getIdLong());
-        if (previous.messageId() == 0) return;
-        var channel = context.guild().getChannelById(GuildMessageChannel.class, previous.channelId());
-        if (channel != null) channel.deleteMessageById(previous.messageId()).queue(ignored -> {}, error ->
-                LoggerFactory.getLogger(PlayerPanels.class).warn("Could not delete previous player in guild {}", guildId));
+    static Mono<Void> publish(CommandContext context, MusicService music) {
+        return music.voiceOperation(context.guildId(), () -> context.replyMessage(PlayerPanel.render(music, context.guildId()))
+                .flatMap(message -> {
+                    var previous = music.session(context.guildId()).replacePanel(message.getChannelId().asLong(), message.getId().asLong());
+                    if (previous.messageId() == 0) return Mono.empty();
+                    return context.client().getMessageById(Access.id(previous.channelId()), Access.id(previous.messageId())).flatMap(old -> old.delete())
+                            .onErrorResume(error -> Mono.empty());
+                }));
     }
 }

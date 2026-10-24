@@ -1,6 +1,7 @@
 package com.sumirelabs.kita.logshare;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static com.sumirelabs.kita.discord.Payloads.json;
 import com.sumirelabs.kita.settings.GuildSettings;
 import java.util.Map;
 import java.util.Set;
@@ -34,14 +35,14 @@ class LogSharePolicyTest {
     }
     @Test void responseUsesSilentComponentsAndNoEmbeds() {
         var message = LogShareMessages.shared("latest.log", "https://mclo.gs/abc123");
-        assertTrue(message.isUsingComponentsV2()); assertTrue(message.isSuppressedNotifications());
-        assertTrue(message.getEmbeds().isEmpty());
-        assertTrue(message.toData().toString().contains("https://mclo.gs/abc123"));
-        var children = message.toData().getArray("components").getObject(0).getArray("components");
-        assertEquals("## LogShare\nファイル名: latest.log", children.getObject(0).getString("content"));
-        var buttons = children.getObject(1).getArray("components");
-        assertEquals("mclo.gsでログを開く", buttons.getObject(0).getString("label"));
-        assertEquals("ログをダウンロード", buttons.getObject(1).getString("label"));
-        assertEquals("latest.log", LogShareDownloads.filename(buttons.getObject(1).getString("custom_id")));
+        assertTrue(message.flags().get().contains(discord4j.core.object.entity.Message.Flag.IS_COMPONENTS_V2)); assertTrue(message.flags().get().contains(discord4j.core.object.entity.Message.Flag.SUPPRESS_NOTIFICATIONS));
+        assertTrue(message.embeds().toOptional().orElse(java.util.List.of()).isEmpty());
+        assertTrue(json(message).toString().contains("https://mclo.gs/abc123"));
+        var children = json(message).get("components").get(0).get("components");
+        assertEquals("## LogShare\nファイル名: latest.log", children.get(0).get("content").asText());
+        var buttons = children.get(1).get("components");
+        assertEquals("mclo.gsでログを開く", buttons.get(0).get("label").asText());
+        assertEquals("ログをダウンロード", buttons.get(1).get("label").asText());
+        assertEquals("latest.log", LogShareDownloads.filename(buttons.get(1).get("custom_id").asText()));
     }
 }
