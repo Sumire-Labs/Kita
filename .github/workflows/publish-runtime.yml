@@ -1,0 +1,32 @@
+name: Publish Kita FeatherPanel runtime
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: kita-featherpanel-runtime
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test release updater
+        run: python3 -m unittest discover -s deploy/featherpanel -p 'test_*.py' -v
+      - name: Build and publish Java 25 runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_USER: ${{ github.actor }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${IMAGE_OWNER,,}/kita-featherpanel:java25"
+          docker build --pull -t "$image" deploy/featherpanel
+          docker run --rm --entrypoint /bin/bash "$image" -c \
+            'set -e; bash -n /usr/local/bin/kita-entrypoint /usr/local/bin/kita-start; java -version; ffmpeg -version >/dev/null; yt-dlp --version'
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_USER" --password-stdin
+          docker push "$image"

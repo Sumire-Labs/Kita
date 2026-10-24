@@ -1,0 +1,21 @@
+bot:
+  token: "${DISCORD_TOKEN}"
+  shards: 0
+  developmentGuildId: 0
+database:
+  url: "${JDBC_URL}"
+  user: "${MARIADB_USER:-kita}"
+  password: "${MARIADB_PASSWORD}"
+deepl:
+  key: "${DEEPL_KEY:-}"
+  maxCharacters: 3000
+  flagLanguages: {}
+music:
+  enabled: true
+  uri: "${LAVALINK_URI}"
+  password: "${LAVALINK_PASSWORD}"
+  presetsDirectory: "${PRESETS_DIRECTORY:-presets}"
+  defaultPreset: "${DEFAULT_PRESET:-Aura_Halo_2.0.wav}"
+previews:
+  ytDlp: "${YT_DLP:-yt-dlp}"
+dataDirectory: "${DATA_DIRECTORY:-data}"

@@ -1,0 +1,142 @@
+{
+    "_comment": "Kita dedicated Spell. Runtime image must be built and published before deployment.",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-10-24T00:00:00+09:00",
+    "name": "Kita — Java 25 / versioned releases",
+    "author": "Sumire Labs",
+    "description": "Kita専用。Java 25、FFmpeg、yt-dlp、描画ライブラリ対応。KITA_VERSIONを公開リリースのタグ名に変更して再起動すると、SHA-256を検証してBOT本体を更新します。DBとLavalinkは別サービスです。",
+    "features": [],
+    "docker_images": {
+        "Kita Runtime / Java 25": "ghcr.io/sumire-labs/kita-featherpanel:java25"
+    },
+    "file_denylist": [],
+    "startup": "/usr/local/bin/kita-start",
+    "config": {
+        "files": "{}",
+        "startup": "{\"done\": \"started with\"}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\nset -euo pipefail\numask 077\nmkdir -p /mnt/server/config /mnt/server/data /mnt/server/presets\nif [[ ! -f /mnt/server/config/kita.yml ]]; then\n  install -m 600 /opt/kita/kita.example.yml /mnt/server/config/kita.yml\nfi\necho \"Kita folders prepared. Set credentials and a published release tag before starting.\"\n",
+            "container": "ghcr.io/sumire-labs/kita-featherpanel:java25",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Kitaのバージョン",
+            "description": "初回のlatestはその時点の安定版に固定されます。更新時はGitHub Releaseの正確なタグ名を入力して再起動してください。",
+            "env_variable": "KITA_VERSION",
+            "default_value": "latest",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:80|regex:/^[A-Za-z0-9][A-Za-z0-9._-]*$/",
+            "field_type": "text"
+        },
+        {
+            "name": "Discord BOTトークン",
+            "description": "管理者が設定してください。既存BOTと同時起動しないでください。",
+            "env_variable": "DISCORD_TOKEN",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "MariaDBの接続URL",
+            "description": "既存DBへ到達できるURL。例：jdbc:mariadb://192.168.0.4:3307/kita",
+            "env_variable": "JDBC_URL",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "MariaDBのユーザー名",
+            "description": "既存DBのユーザー名。",
+            "env_variable": "MARIADB_USER",
+            "default_value": "kita",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "MariaDBのパスワード",
+            "description": "既存DBのパスワード。",
+            "env_variable": "MARIADB_PASSWORD",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "LavalinkのURL",
+            "description": "既存Lavalinkへ到達できるURL。例：http://192.168.0.4:2334",
+            "env_variable": "LAVALINK_URI",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "Lavalinkのパスワード",
+            "description": "既存Lavalinkのパスワード。",
+            "env_variable": "LAVALINK_PASSWORD",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "DeepLのAPIキー",
+            "description": "翻訳機能を使用する場合のみ設定。",
+            "env_variable": "DEEPL_KEY",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "音声プリセットの場所",
+            "description": "このBOT用のフォルダーです。Lavalink側にも対応するプリセットが必要です。",
+            "env_variable": "PRESETS_DIRECTORY",
+            "default_value": "presets",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "既定の音声プリセット",
+            "description": "既定のプリセット名。offで明示的に無効化できます。",
+            "env_variable": "DEFAULT_PRESET",
+            "default_value": "Aura_Halo_2.0.wav",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        },
+        {
+            "name": "データ保存先",
+            "description": "更新対象のアプリ本体とは分離された永続データの保存先。",
+            "env_variable": "DATA_DIRECTORY",
+            "default_value": "data",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:2048",
+            "field_type": "text"
+        }
+    ]
+}
