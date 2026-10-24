@@ -87,7 +87,7 @@ tasks.register('releaseBundle', KitaReleaseBundle) {
     description = 'Builds tested release assets and verifies embedded version metadata.'
     dependsOn 'check', ':app:distZip', ':audio:shadowJar'
     versionName.set(project.version.toString())
-    stageName.set(versioning.stage.map { it.id() })
+    stageName.set(kitaReleaseStage)
     revision.set(providers.exec { commandLine 'git', 'rev-parse', 'HEAD' }.standardOutput.asText.map { it.trim() })
     appArchive.set(project(':app').layout.buildDirectory.file("distributions/kita-${project.version}.zip"))
     audioArchive.set(project(':audio').layout.buildDirectory.file('libs/kita-audio.jar'))

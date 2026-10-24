@@ -35,6 +35,11 @@ jobs:
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
           RELEASE_PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
+          if [[ "$RELEASE_TAG" =~ -(alpha|beta|rc)\.[0-9]+$ ]] && \
+             [[ "$RELEASE_VERSION" != "${RELEASE_TAG#v}" ]]; then
+            echo "Release version does not match the numbered prerelease tag" >&2
+            exit 1
+          fi
           options=(--verify-tag --generate-notes --title "Kita ${RELEASE_VERSION}")
           if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
             options+=(--prerelease)

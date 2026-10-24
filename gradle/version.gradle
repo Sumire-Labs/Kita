@@ -1,0 +1,24 @@
+// Preserve numbered SemVer prereleases such as 0.1.0-beta.1 exactly.
+// Cleanroom Versioning 3.4.0 only understands unnumbered stage suffixes.
+def refType = providers.environmentVariable('GITHUB_REF_TYPE').orNull
+def tag = refType == 'tag' ? providers.environmentVariable('GITHUB_REF_NAME').get() : ''
+if (!tag) {
+    def exactTag = providers.exec {
+        commandLine 'git', 'describe', '--exact-match', '--tags', 'HEAD'
+        ignoreExitValue = true
+    }
+    tag = exactTag.standardOutput.asText.get().trim()
+}
+def numbered = tag =~ /^v?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)-(alpha|beta|rc)\.(?:0|[1-9]\d*))$/
+if (numbered.matches()) {
+    version = numbered.group(1)
+    def stage = numbered.group(2)
+    ext.kitaReleaseStage = providers.provider { stage }
+    tasks.register('printVersion') {
+        group = 'versioning'
+        doLast { println project.version }
+    }
+} else {
+    apply plugin: 'com.cleanroommc.versioning'
+    ext.kitaReleaseStage = versioning.stage.map { it.id() }
+}
